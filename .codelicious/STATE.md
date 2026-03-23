@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 3 complete. **Quality review identified 12 P1, 18 P2, and 14 P3 findings.** The most critical: all 10 physics checks silently pass NaN inputs (IEEE 754 bypass). These must be fixed before Step 4.
+Phase 1, Step 3a complete. All 12 P1 and R2-01..R2-07 findings fixed. 84 tests passing, clippy clean. Ready for Step 4 (authority validation).
 
 ## Completed Tasks
 
@@ -9,6 +9,7 @@ Phase 1, Step 3 complete. **Quality review identified 12 P1, 18 P2, and 14 P3 fi
 - [x] **Step 1 — Workspace init**: Cargo workspace, 4 crates (`invariant-core`, `invariant-cli`, `invariant-sim`, `invariant-eval`), all module stubs, 4 robot profile JSON files.
 - [x] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. Fixed all 6 P1 and all 15 P2 findings from Step 2 review.
 - [x] **Step 3 — Physics checks (10)**: All 10 pure functions (P1-P10) implemented in `physics/` with `run_all_checks()` orchestrator and 64 passing tests.
+- [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all 10 physics checks, clippy fix, unbounded collection caps, reqwest removed, R2-01..R2-07 silent-skip fixes. 20 new tests (84 total).
 
 ---
 
@@ -104,7 +105,7 @@ Build: PASS. Tests: 64/64 PASS. Clippy: FAIL (1 lint error).
 ### Phase 1: Core
 - [x] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. Fixed all 6 P1 and all 15 P2 findings.
 - [x] **Step 3 — Physics checks (10)**: Pure functions, zero allocation, extensively tested.
-- [ ] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all physics checks, clippy fix, unbounded collection caps. **Must fix all R1-* and R2-01 through R2-07 before Step 4.**
+- [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all physics checks, clippy fix, unbounded collection caps. All R1-* and R2-01 through R2-07 fixed.
 - [ ] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification, monotonicity, provenance.
 - [ ] **Step 5 — Validator orchestrator**: Authority + physics -> signed verdict + optional signed actuation.
 - [ ] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
