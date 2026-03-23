@@ -1,12 +1,13 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 1 complete. Code review complete with 6 P1, 15 P2, 18 P3 findings recorded below.
+Phase 1, Step 2 complete. All P1 and P2 review findings resolved. Next: Step 3 — Physics checks (10 pure functions, zero allocation, extensively tested).
 
 ## Completed Tasks
 
 ### Phase 1: Core
 - [x] **Step 1 — Workspace init**: Cargo workspace, 4 crates (`invariant-core`, `invariant-cli`, `invariant-sim`, `invariant-eval`), all module stubs, 4 robot profile JSON files.
+- [x] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. Fixed all 6 P1 and all 15 P2 findings.
 
 ## Review Findings (Step 2 must address all P1 and P2 items)
 
@@ -71,7 +72,7 @@ Reviewed: `invariant-core` models, `invariant-cli`, `invariant-sim`, `invariant-
 ## Pending Tasks
 
 ### Phase 1: Core
-- [ ] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. **Must fix all P1 and P2 findings above.**
+- [x] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. Fixed all 6 P1 and all 15 P2 findings.
 - [ ] **Step 3 — Physics checks (10)**: Pure functions, zero allocation, extensively tested.
 - [ ] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification, monotonicity, provenance.
 - [ ] **Step 5 — Validator orchestrator**: Authority + physics -> signed verdict + optional signed actuation.
