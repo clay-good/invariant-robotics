@@ -29,7 +29,12 @@ pub fn check_workspace_bounds(
         WorkspaceBounds::Aabb { min, max } => {
             for ee in end_effectors {
                 let p = &ee.position;
-                if p[0] < min[0] || p[0] > max[0]
+                if !p[0].is_finite() || !p[1].is_finite() || !p[2].is_finite() {
+                    violations.push(format!(
+                        "'{}': position contains NaN or infinite value",
+                        ee.name
+                    ));
+                } else if p[0] < min[0] || p[0] > max[0]
                     || p[1] < min[1] || p[1] > max[1]
                     || p[2] < min[2] || p[2] > max[2]
                 {

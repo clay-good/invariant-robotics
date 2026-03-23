@@ -24,7 +24,12 @@ pub fn check_torque_limits(
                 ));
             }
             Some(def) => {
-                if state.effort.abs() > def.max_torque {
+                if !state.effort.is_finite() {
+                    violations.push(format!(
+                        "'{}': effort is NaN or infinite",
+                        state.name
+                    ));
+                } else if state.effort.abs() > def.max_torque {
                     violations.push(format!(
                         "'{}': |effort| {:.6} exceeds max_torque {:.6}",
                         state.name,

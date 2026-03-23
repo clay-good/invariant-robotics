@@ -26,6 +26,13 @@ pub enum ValidationError {
     )]
     ProximityVelocityScaleOutOfRange { name: String, scale: f64 },
 
+    #[error("collection '{name}' has {count} elements, exceeding maximum of {max}")]
+    CollectionTooLarge {
+        name: &'static str,
+        count: usize,
+        max: usize,
+    },
+
     #[error("authority chain must have at least one hop")]
     EmptyAuthorityChain,
 

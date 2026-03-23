@@ -235,16 +235,18 @@ mod tests {
     }
 
     #[test]
-    fn p4_missing_previous_joint_skipped() {
+    fn p4_missing_previous_joint_flagged() {
         let defs = vec![joint_def("j1", -1.0, 1.0), joint_def("j2", -1.0, 1.0)];
-        // j2 appears in current but not in previous — should be skipped
+        // j2 appears in current but not in previous — should be flagged as violation
         let prev = vec![joint_state("j1", 0.0, 1.0, 0.0)];
         let curr = vec![
             joint_state("j1", 0.0, 1.1, 0.0), // accel = 10, within 25
-            joint_state("j2", 0.0, 100.0, 0.0), // would be huge accel, but no prev data
+            joint_state("j2", 0.0, 100.0, 0.0), // no prev data — flagged
         ];
         let r = acceleration::check_acceleration_limits(&curr, Some(&prev), &defs, 0.01);
-        assert!(r.passed);
+        assert!(!r.passed);
+        assert!(r.details.contains("j2"));
+        assert!(r.details.contains("no previous joint state"));
     }
 
     #[test]
@@ -400,7 +402,7 @@ mod tests {
     fn p7_far_apart_passes() {
         let pairs = vec![CollisionPair { link_a: "left_hand".into(), link_b: "head".into() }];
         let ees = vec![ee("left_hand", 0.0, 0.0, 0.0), ee("head", 1.0, 1.0, 1.0)];
-        let r = self_collision::check_self_collision(&ees, &pairs);
+        let r = self_collision::check_self_collision(&ees, &pairs, 0.01);
         assert!(r.passed);
     }
 
@@ -408,7 +410,7 @@ mod tests {
     fn p7_too_close_fails() {
         let pairs = vec![CollisionPair { link_a: "left_hand".into(), link_b: "head".into() }];
         let ees = vec![ee("left_hand", 0.0, 0.0, 0.0), ee("head", 0.005, 0.0, 0.0)];
-        let r = self_collision::check_self_collision(&ees, &pairs);
+        let r = self_collision::check_self_collision(&ees, &pairs, 0.01);
         assert!(!r.passed);
         assert!(r.details.contains("left_hand"));
         assert!(r.details.contains("head"));
@@ -419,22 +421,23 @@ mod tests {
         let pairs = vec![CollisionPair { link_a: "a".into(), link_b: "b".into() }];
         // Distance = 0.01 exactly, which is the threshold. < 0.01 fails, >= passes.
         let ees = vec![ee("a", 0.0, 0.0, 0.0), ee("b", 0.01, 0.0, 0.0)];
-        let r = self_collision::check_self_collision(&ees, &pairs);
+        let r = self_collision::check_self_collision(&ees, &pairs, 0.01);
         assert!(r.passed);
     }
 
     #[test]
-    fn p7_missing_link_skipped() {
+    fn p7_missing_link_flagged() {
         let pairs = vec![CollisionPair { link_a: "left_hand".into(), link_b: "missing".into() }];
         let ees = vec![ee("left_hand", 0.0, 0.0, 0.0)];
-        let r = self_collision::check_self_collision(&ees, &pairs);
-        assert!(r.passed); // pair skipped because "missing" has no position data
+        let r = self_collision::check_self_collision(&ees, &pairs, 0.01);
+        assert!(!r.passed); // missing link is now flagged as violation
+        assert!(r.details.contains("missing"));
     }
 
     #[test]
     fn p7_empty_pairs_passes() {
         let ees = vec![ee("left_hand", 0.0, 0.0, 0.0)];
-        let r = self_collision::check_self_collision(&ees, &[]);
+        let r = self_collision::check_self_collision(&ees, &[], 0.01);
         assert!(r.passed);
     }
 
@@ -450,7 +453,7 @@ mod tests {
     fn p8_zero_delta_time() {
         let r = delta_time::check_delta_time(0.0, 0.1);
         assert!(!r.passed);
-        assert!(r.details.contains("not positive"));
+        assert!(r.details.contains("not finite and positive"));
     }
 
     #[test]
@@ -703,6 +706,7 @@ mod tests {
             collision_pairs: vec![],
             stability: None,
             max_delta_time: 0.1,
+            min_collision_distance: 0.01,
             global_velocity_scale: 1.0,
             watchdog_timeout_ms: 50,
             safe_stop_profile: SafeStopProfile::default(),
@@ -773,6 +777,7 @@ mod tests {
             collision_pairs: vec![],
             stability: None,
             max_delta_time: 0.1,
+            min_collision_distance: 0.01,
             global_velocity_scale: 1.0,
             watchdog_timeout_ms: 50,
             safe_stop_profile: SafeStopProfile::default(),
@@ -816,5 +821,218 @@ mod tests {
         assert!(results[8].passed);
         // P10: proximity — no zones => pass
         assert!(results[9].passed);
+    }
+
+    // ── NaN/Inf guard tests (R3-01) ─────────────────────────────────────
+
+    #[test]
+    fn p1_nan_position_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", f64::NAN, 0.0, 0.0)];
+        let r = joint_limits::check_joint_limits(&joints, &defs);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p1_inf_position_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", f64::INFINITY, 0.0, 0.0)];
+        let r = joint_limits::check_joint_limits(&joints, &defs);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN or infinite"));
+    }
+
+    #[test]
+    fn p2_nan_velocity_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", 0.0, f64::NAN, 0.0)];
+        let r = velocity::check_velocity_limits(&joints, &defs, 1.0);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p2_neg_inf_velocity_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", 0.0, f64::NEG_INFINITY, 0.0)];
+        let r = velocity::check_velocity_limits(&joints, &defs, 1.0);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN or infinite"));
+    }
+
+    #[test]
+    fn p3_nan_effort_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", 0.0, 0.0, f64::NAN)];
+        let r = torque::check_torque_limits(&joints, &defs);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p3_inf_effort_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", 0.0, 0.0, f64::INFINITY)];
+        let r = torque::check_torque_limits(&joints, &defs);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN or infinite"));
+    }
+
+    #[test]
+    fn p4_nan_delta_time_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let prev = vec![joint_state("j1", 0.0, 1.0, 0.0)];
+        let curr = vec![joint_state("j1", 0.0, 1.5, 0.0)];
+        let r = acceleration::check_acceleration_limits(&curr, Some(&prev), &defs, f64::NAN);
+        assert!(!r.passed);
+    }
+
+    #[test]
+    fn p4_nan_velocity_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let prev = vec![joint_state("j1", 0.0, 1.0, 0.0)];
+        let curr = vec![joint_state("j1", 0.0, f64::NAN, 0.0)];
+        let r = acceleration::check_acceleration_limits(&curr, Some(&prev), &defs, 0.01);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p4_inf_previous_velocity_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let prev = vec![joint_state("j1", 0.0, f64::INFINITY, 0.0)];
+        let curr = vec![joint_state("j1", 0.0, 1.0, 0.0)];
+        let r = acceleration::check_acceleration_limits(&curr, Some(&prev), &defs, 0.01);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN or infinite"));
+    }
+
+    #[test]
+    fn p5_nan_position_fails() {
+        let workspace = WorkspaceBounds::Aabb {
+            min: [-2.0, -2.0, 0.0],
+            max: [2.0, 2.0, 2.5],
+        };
+        let ees = vec![ee("ee1", f64::NAN, 0.0, 1.0)];
+        let r = workspace::check_workspace_bounds(&ees, &workspace);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p5_inf_position_fails() {
+        let workspace = WorkspaceBounds::Aabb {
+            min: [-2.0, -2.0, 0.0],
+            max: [2.0, 2.0, 2.5],
+        };
+        let ees = vec![ee("ee1", 0.0, f64::INFINITY, 1.0)];
+        let r = workspace::check_workspace_bounds(&ees, &workspace);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN or infinite"));
+    }
+
+    #[test]
+    fn p6_nan_position_fails() {
+        let zones = vec![ExclusionZone::Aabb {
+            name: "zone".into(),
+            min: [-1.0, -1.0, -1.0],
+            max: [1.0, 1.0, 1.0],
+        }];
+        let ees = vec![ee("ee1", f64::NAN, 0.0, 0.0)];
+        let r = exclusion_zones::check_exclusion_zones(&ees, &zones);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p7_nan_position_fails() {
+        let pairs = vec![CollisionPair { link_a: "a".into(), link_b: "b".into() }];
+        let ees = vec![ee("a", f64::NAN, 0.0, 0.0), ee("b", 1.0, 0.0, 0.0)];
+        let r = self_collision::check_self_collision(&ees, &pairs, 0.01);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p8_nan_delta_time_fails() {
+        let r = delta_time::check_delta_time(f64::NAN, 0.1);
+        assert!(!r.passed);
+    }
+
+    #[test]
+    fn p8_inf_delta_time_fails() {
+        let r = delta_time::check_delta_time(f64::INFINITY, 0.1);
+        assert!(!r.passed);
+    }
+
+    #[test]
+    fn p8_nan_max_delta_time_fails() {
+        let r = delta_time::check_delta_time(0.01, f64::NAN);
+        assert!(!r.passed);
+    }
+
+    #[test]
+    fn p9_nan_com_fails() {
+        let config = StabilityConfig {
+            support_polygon: vec![[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1]],
+            com_height_estimate: 0.9,
+            enabled: true,
+        };
+        let com = [f64::NAN, 0.0, 0.9];
+        let r = stability::check_stability(Some(&com), Some(&config));
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p10_nan_ee_position_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", 0.0, 1.0, 0.0)];
+        let zones = vec![ProximityZone::Sphere {
+            name: "zone".into(),
+            center: [0.0, 0.0, 0.0],
+            radius: 10.0,
+            velocity_scale: 0.5,
+            dynamic: false,
+        }];
+        let ees = vec![ee("ee1", f64::NAN, 0.0, 0.0)];
+        let r = proximity::check_proximity_velocity(&joints, &defs, &ees, &zones, 1.0);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p10_nan_velocity_fails() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j1", 0.0, f64::NAN, 0.0)];
+        let zones = vec![ProximityZone::Sphere {
+            name: "zone".into(),
+            center: [0.0, 0.0, 0.0],
+            radius: 10.0,
+            velocity_scale: 0.5,
+            dynamic: false,
+        }];
+        let ees = vec![ee("ee1", 0.0, 0.0, 0.0)];
+        let r = proximity::check_proximity_velocity(&joints, &defs, &ees, &zones, 1.0);
+        assert!(!r.passed);
+        assert!(r.details.contains("NaN"));
+    }
+
+    #[test]
+    fn p10_unknown_joint_flagged() {
+        let defs = vec![joint_def("j1", -1.0, 1.0)];
+        let joints = vec![joint_state("j_unknown", 0.0, 1.0, 0.0)];
+        let zones = vec![ProximityZone::Sphere {
+            name: "zone".into(),
+            center: [0.0, 0.0, 0.0],
+            radius: 10.0,
+            velocity_scale: 0.5,
+            dynamic: false,
+        }];
+        let ees = vec![ee("ee1", 0.0, 0.0, 0.0)];
+        let r = proximity::check_proximity_velocity(&joints, &defs, &ees, &zones, 1.0);
+        assert!(!r.passed);
+        assert!(r.details.contains("unknown joint"));
     }
 }

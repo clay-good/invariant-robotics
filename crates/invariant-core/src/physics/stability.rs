@@ -51,6 +51,16 @@ pub fn check_stability(
         };
     }
 
+    // Reject non-finite CoM values.
+    if !com[0].is_finite() || !com[1].is_finite() || !com[2].is_finite() {
+        return CheckResult {
+            name: "stability".to_string(),
+            category: "physics".to_string(),
+            passed: false,
+            details: "center of mass contains NaN or infinite value".to_string(),
+        };
+    }
+
     // Project the 3-D CoM onto the 2-D ground plane (x, y).
     let px = com[0];
     let py = com[1];

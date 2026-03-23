@@ -8,19 +8,19 @@ use crate::models::verdict::CheckResult;
 /// clock error or command replay.  A step exceeding `max_delta_time` may cause
 /// the controller to integrate beyond its stability margin.
 pub fn check_delta_time(delta_time: f64, max_delta_time: f64) -> CheckResult {
-    if delta_time <= 0.0 {
+    if !delta_time.is_finite() || delta_time <= 0.0 {
         return CheckResult {
             name: "delta_time".to_string(),
             category: "physics".to_string(),
             passed: false,
             details: format!(
-                "delta_time {:.9} s is not positive (must be > 0)",
+                "delta_time {} is not finite and positive (must be > 0)",
                 delta_time
             ),
         };
     }
 
-    if delta_time > max_delta_time {
+    if !max_delta_time.is_finite() || delta_time > max_delta_time {
         return CheckResult {
             name: "delta_time".to_string(),
             category: "physics".to_string(),

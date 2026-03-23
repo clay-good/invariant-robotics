@@ -27,7 +27,12 @@ pub fn check_velocity_limits(
             }
             Some(def) => {
                 let limit = def.max_velocity * global_velocity_scale;
-                if state.velocity.abs() > limit {
+                if !state.velocity.is_finite() {
+                    violations.push(format!(
+                        "'{}': velocity is NaN or infinite",
+                        state.name
+                    ));
+                } else if state.velocity.abs() > limit {
                     violations.push(format!(
                         "'{}': |velocity| {:.6} exceeds limit {:.6} (max_velocity {:.6} * scale {:.6})",
                         state.name,

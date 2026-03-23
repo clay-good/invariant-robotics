@@ -35,8 +35,8 @@ pub fn check_acceleration_limits(
         };
     };
 
-    // Non-positive delta_time makes acceleration undefined; treat as violation.
-    if delta_time <= 0.0 {
+    // Non-finite or non-positive delta_time makes acceleration undefined; treat as violation.
+    if !delta_time.is_finite() || delta_time <= 0.0 {
         return CheckResult {
             name: "acceleration_limits".to_string(),
             category: "physics".to_string(),
@@ -60,10 +60,23 @@ pub fn check_acceleration_limits(
             continue;
         };
 
-        // No previous entry for this joint — skip (treat as first observation).
+        // No previous entry for this joint — flag as violation.
         let Some(prev_state) = prev.iter().find(|p| p.name == state.name) else {
+            violations.push(format!(
+                "'{}': no previous joint state (cannot compute acceleration)",
+                state.name
+            ));
             continue;
         };
+
+        // Reject non-finite velocities.
+        if !state.velocity.is_finite() || !prev_state.velocity.is_finite() {
+            violations.push(format!(
+                "'{}': velocity is NaN or infinite",
+                state.name
+            ));
+            continue;
+        }
 
         let accel = (state.velocity - prev_state.velocity).abs() / delta_time;
         if accel > def.max_acceleration {

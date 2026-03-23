@@ -17,8 +17,7 @@ use crate::models::verdict::CheckResult;
 /// 4. A violation is recorded for every joint whose `|velocity|` exceeds that
 ///    limit.
 ///
-/// A joint that has no matching [`JointDefinition`] is skipped — the check
-/// cannot be evaluated without a maximum-velocity reference.
+/// A joint that has no matching [`JointDefinition`] is flagged as a violation.
 ///
 /// The check passes trivially when `joints`, `definitions`, `end_effectors`, or
 /// `proximity_zones` is empty, or when no end-effector is inside any zone.
@@ -29,6 +28,25 @@ pub fn check_proximity_velocity(
     proximity_zones: &[ProximityZone],
     global_velocity_scale: f64,
 ) -> CheckResult {
+    // Reject non-finite end-effector positions before proximity determination.
+    let mut ee_violations: Vec<String> = Vec::new();
+    for ee in end_effectors {
+        if !ee.position[0].is_finite() || !ee.position[1].is_finite() || !ee.position[2].is_finite() {
+            ee_violations.push(format!(
+                "'{}': end-effector position contains NaN or infinite value",
+                ee.name
+            ));
+        }
+    }
+    if !ee_violations.is_empty() {
+        return CheckResult {
+            name: "proximity_velocity".to_string(),
+            category: "physics".to_string(),
+            passed: false,
+            details: ee_violations.join("; "),
+        };
+    }
+
     // Determine the most-restrictive (minimum) velocity_scale across all zones
     // that currently contain at least one end-effector.
     let min_scale = active_proximity_scale(end_effectors, proximity_zones);
@@ -51,8 +69,22 @@ pub fn check_proximity_velocity(
     for state in joints {
         let def = match definitions.iter().find(|d| d.name == state.name) {
             Some(d) => d,
-            None => continue,
+            None => {
+                violations.push(format!(
+                    "'{}': unknown joint (no definition found)",
+                    state.name
+                ));
+                continue;
+            }
         };
+
+        if !state.velocity.is_finite() {
+            violations.push(format!(
+                "'{}': velocity is NaN or infinite",
+                state.name
+            ));
+            continue;
+        }
 
         let effective_limit = def.max_velocity * min_scale * global_velocity_scale;
         let abs_vel = state.velocity.abs();

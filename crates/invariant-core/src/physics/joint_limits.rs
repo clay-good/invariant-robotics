@@ -24,7 +24,12 @@ pub fn check_joint_limits(
                 ));
             }
             Some(def) => {
-                if state.position < def.min || state.position > def.max {
+                if !state.position.is_finite() {
+                    violations.push(format!(
+                        "'{}': position is NaN or infinite",
+                        state.name
+                    ));
+                } else if state.position < def.min || state.position > def.max {
                     violations.push(format!(
                         "'{}': position {:.6} outside [{:.6}, {:.6}]",
                         state.name, state.position, def.min, def.max

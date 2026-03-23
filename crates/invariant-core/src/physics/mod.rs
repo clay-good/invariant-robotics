@@ -59,6 +59,7 @@ pub fn run_all_checks(
         self_collision::check_self_collision(
             &command.end_effector_positions,
             &profile.collision_pairs,
+            profile.min_collision_distance,
         ),
         // P8: Delta time
         delta_time::check_delta_time(command.delta_time, profile.max_delta_time),

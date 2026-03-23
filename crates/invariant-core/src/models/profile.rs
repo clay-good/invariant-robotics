@@ -21,19 +21,15 @@ pub enum BoundsType {
 }
 
 /// Safe-stop behaviour strategy. Prevents silent watchdog failure on unknown strings (P1-6).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SafeStopStrategy {
+    #[default]
     ControlledCrouch,
     ImmediateStop,
     ParkPosition,
 }
 
-impl Default for SafeStopStrategy {
-    fn default() -> Self {
-        SafeStopStrategy::ControlledCrouch
-    }
-}
 
 // --- CollisionPair (P3-6): named struct instead of positional [String; 2] ---
 
@@ -84,12 +80,18 @@ pub struct RobotProfile {
     #[serde(default)]
     pub stability: Option<StabilityConfig>,
     pub max_delta_time: f64,
+    #[serde(default = "default_min_collision_distance")]
+    pub min_collision_distance: f64,
     #[serde(default = "default_velocity_scale")]
     pub global_velocity_scale: f64,
     #[serde(default = "default_watchdog_timeout_ms")]
     pub watchdog_timeout_ms: u64,
     #[serde(default)]
     pub safe_stop_profile: SafeStopProfile,
+}
+
+fn default_min_collision_distance() -> f64 {
+    0.01
 }
 
 fn default_velocity_scale() -> f64 {
@@ -100,8 +102,47 @@ fn default_watchdog_timeout_ms() -> u64 {
     50
 }
 
+/// Maximum number of joints per profile (prevents memory-exhaustion DoS).
+const MAX_JOINTS: usize = 256;
+/// Maximum number of exclusion zones per profile.
+const MAX_EXCLUSION_ZONES: usize = 256;
+/// Maximum number of proximity zones per profile.
+const MAX_PROXIMITY_ZONES: usize = 256;
+/// Maximum number of collision pairs per profile.
+const MAX_COLLISION_PAIRS: usize = 1024;
+
 impl Validate for RobotProfile {
     fn validate(&self) -> Result<(), ValidationError> {
+        // Collection length caps (R1-11) — reject oversized inputs early.
+        if self.joints.len() > MAX_JOINTS {
+            return Err(ValidationError::CollectionTooLarge {
+                name: "joints",
+                count: self.joints.len(),
+                max: MAX_JOINTS,
+            });
+        }
+        if self.exclusion_zones.len() > MAX_EXCLUSION_ZONES {
+            return Err(ValidationError::CollectionTooLarge {
+                name: "exclusion_zones",
+                count: self.exclusion_zones.len(),
+                max: MAX_EXCLUSION_ZONES,
+            });
+        }
+        if self.proximity_zones.len() > MAX_PROXIMITY_ZONES {
+            return Err(ValidationError::CollectionTooLarge {
+                name: "proximity_zones",
+                count: self.proximity_zones.len(),
+                max: MAX_PROXIMITY_ZONES,
+            });
+        }
+        if self.collision_pairs.len() > MAX_COLLISION_PAIRS {
+            return Err(ValidationError::CollectionTooLarge {
+                name: "collision_pairs",
+                count: self.collision_pairs.len(),
+                max: MAX_COLLISION_PAIRS,
+            });
+        }
+
         // P2-5: global_velocity_scale must be in (0.0, 1.0]
         if self.global_velocity_scale <= 0.0 || self.global_velocity_scale > 1.0 {
             return Err(ValidationError::VelocityScaleOutOfRange(

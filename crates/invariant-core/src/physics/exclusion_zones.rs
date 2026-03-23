@@ -28,6 +28,13 @@ pub fn check_exclusion_zones(
     let mut violations: Vec<String> = Vec::new();
 
     for ee in end_effectors {
+        if !ee.position[0].is_finite() || !ee.position[1].is_finite() || !ee.position[2].is_finite() {
+            violations.push(format!(
+                "'{}': position contains NaN or infinite value",
+                ee.name
+            ));
+            continue;
+        }
         for zone in zones {
             match zone {
                 ExclusionZone::Aabb { name, min, max } => {
