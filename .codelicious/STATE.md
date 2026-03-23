@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 4 complete. Ed25519 COSE_Sign1 authority chain validation implemented with A1 (provenance), A2 (monotonicity), A3 (continuity) checks. 122 tests passing, clippy clean. Ready for Step 5 (validator orchestrator).
+Phase 1, Step 4 complete and reviewed. **Quality review identified 6 P1, 10 P2, and 12 P3 findings.** Most critical: chain validation reads unverified `claim` field instead of decoded COSE payload — nullifies all three invariants. 122 tests passing, clippy clean. Needs Step 4a fix pass before Step 5.
 
 ## Completed Tasks
 
@@ -11,6 +11,57 @@ Phase 1, Step 4 complete. Ed25519 COSE_Sign1 authority chain validation implemen
 - [x] **Step 3 — Physics checks (10)**: All 10 pure functions (P1-P10) implemented in `physics/` with `run_all_checks()` orchestrator and 64 passing tests.
 - [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all 10 physics checks, clippy fix, unbounded collection caps, reqwest removed, R2-01..R2-07 silent-skip fixes. 20 new tests (84 total).
 - [x] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification (crypto.rs), wildcard operation matching + subset checks (operations.rs), full PCA chain verification with A1/A2/A3 invariants + temporal constraints (chain.rs). AuthorityError enum with typed variants. 38 new tests (122 total).
+
+---
+
+## Review Findings — Step 4 Quality Review (2026-03-23)
+
+Reviewed: all authority modules (crypto.rs, operations.rs, chain.rs, tests.rs), authority model types, error types, workspace config, test suite (122 tests), clippy, build.
+
+Build: PASS. Tests: 122/122 PASS. Clippy: PASS.
+
+### New P1 — Blocking / Security
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S4-P1-01 | `chain.rs:44-110` | **Chain validation uses unverified `signed.claim` instead of decoded COSE payload.** `verify_signed_pca` verifies `signed.raw`, but every subsequent decision (A1 provenance at :59, A2 monotonicity at :69, temporal at :87/:95, key lookup at :50, final_ops construction at :107-110) reads from `signed.claim` — a serde-deserialized field that an attacker can forge independently of `raw`. The function `decode_pca_payload` exists in crypto.rs:72 but is never called by chain.rs. An attacker who supplies a `SignedPca` with valid `raw` from one PCA but forged `claim` from another bypasses all three invariants simultaneously. This is the most critical finding. |
+| S4-P1-02 | `crypto.rs:60` | **`verify` used instead of `verify_strict`.** `ed25519-dalek 2.x` `verify()` accepts small-order and non-canonical points/signatures. `verify_strict()` rejects them. In a safety-critical firewall, signature malleability must be prevented. One-line fix: replace `verifying_key.verify(data, &sig)` with `verifying_key.verify_strict(data, &sig)`. |
+| S4-P1-03 | `authority.rs:120-128` | **`AuthorityChain` has all-pub fields and derives `Deserialize`.** Any caller can struct-literal or deserialize an `AuthorityChain` with arbitrary `hops`, `origin_principal`, `final_ops` — bypassing `verify_chain` entirely. The type should have private fields with a constructor that only `verify_chain` can call. |
+| S4-P1-04 | `authority.rs:45-50` | **`Operation::new` accepts structurally invalid operations.** The character allowlist permits `*` anywhere (e.g., `"act*uate"`, `"actuate:*:shoulder"`), consecutive colons (`"::"`), leading/trailing colons (`":arm"`, `"arm:"`), and critically `":*"` which `strip_suffix(":*")` converts to empty prefix — making `":*"` equivalent to bare `"*"` (universal wildcard). An attacker can smuggle `":*"` into a PCA to grant universal authority while appearing non-obvious to a human reviewer. |
+| S4-P1-05 | `crypto.rs:17,33` | **`sign_pca` panics via `expect` on serialization.** `serde_json::to_vec(claim).expect(...)` and `cose.to_vec().expect(...)` will panic if serialization fails. In a safety-critical library, panic = denial of service. Should return `Result<SignedPca, AuthorityError>`. |
+| S4-P1-06 | `operations.rs:31-35` | **`"prefix:*"` wildcard matches bare prefix itself.** `"actuate:arm:*"` covers `"actuate:arm"` (the prefix without a trailing segment) because `rest.is_empty()` returns true. If `"actuate:arm"` is a distinct capability (e.g., "enumerate arm joints"), a PCA granting `"actuate:arm:*"` (intended: sub-operations only) silently also covers it. Monotonicity reasoning is undermined: a parent granting `"actuate:arm:shoulder"` and a child claiming `"actuate:arm"` should be a violation but would depend on whether `"actuate:arm"` is wildcarded. Ambiguous semantics in a safety-critical authority model. |
+
+### New P2 — Important / Correctness
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S4-P2-01 | `authority.rs:93` | **`p_0` not validated as non-empty.** Empty `p_0` makes A1 provenance check trivially pass if all hops also carry `""`. Cannot be meaningfully audited. (Carry-forward from S3a-P2-07.) |
+| S4-P2-02 | `authority.rs:97` | **`kid` not validated as non-empty.** `trusted_keys` HashMap with `""` key matches any PCA with `kid = ""`. (Carry-forward from S3a-P2-07.) |
+| S4-P2-03 | `authority.rs:99-101` | **`nbf`/`exp` consistency not validated.** A PCA with `nbf >= exp` is accepted — zero-width or inverted validity window produces confusing errors, never valid. |
+| S4-P2-04 | `chain.rs:38-41` | **`MAX_HOPS` error uses `CoseError` variant.** Chain-length policy violation misclassified as COSE decode error. Needs dedicated `ChainTooLong` variant for correct audit logging and error routing. |
+| S4-P2-05 | `crypto.rs:72-85` | **`decode_pca_payload` is `pub` and skips verification.** Doc says "call `verify_signed_pca` first" but nothing enforces it. Should be `pub(crate)` at minimum. |
+| S4-P2-06 | `authority.rs:113` | **`SignedPca.claim` is a `pub` mutable field.** Any code can overwrite `claim` without touching `raw`, trivially creating the mismatch exploited by S4-P1-01. Field should be private or `claim` should be removed from the struct entirely. |
+| S4-P2-07 | `chain.rs:24` | **Temporal boundary doc/code mismatch.** Comment documents valid window as `[nbf, exp]` (inclusive both ends), but code uses `now >= exp` (exclusive exp). JWT convention (RFC 7519) uses exclusive `exp`, making the code likely correct but the comment wrong. Must align. |
+| S4-P2-08 | `error.rs:4` | **`AuthorityError` does not derive `PartialEq`.** Forces verbose `matches!` + destructuring in tests. All inner types support `PartialEq`. Should derive it. |
+| S4-P2-09 | `crypto.rs:57-62` | **Verification closure converts errors to `String`.** Original error type lost — cannot distinguish malformed signature encoding from wrong-key failure in structured error handling or audit. |
+| S4-P2-10 | `chain.rs:71-81` | **Redundant traversal for error reporting after `ops_are_subset` returns false.** `find` re-iterates with `operation_matches` to locate offending op. `unwrap_or_default()` produces empty string if logic bug causes no match. Should use `first_uncovered_op` from operations.rs instead. |
+
+### New P3 — Quality / Future-Proofing
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S4-P3-01 | `tests.rs` | **No test for tampered `claim` field.** The most critical vulnerability (S4-P1-01) has zero test coverage. No test constructs a `SignedPca` where `claim` differs from COSE payload and verifies rejection. |
+| S4-P3-02 | `tests.rs` | **No test for `exp == now` boundary.** `temporal_expired` uses `now - 10s`. The exact boundary (exp equals now) is untested — determines inclusive/exclusive semantics. |
+| S4-P3-03 | `tests.rs` | **No test for `nbf == now` boundary.** `temporal_not_yet_valid` uses `now + 3600s`. Exact boundary untested. |
+| S4-P3-04 | `tests.rs` | **No test for wildcard escalation via child wildcard.** Parent `"actuate:arm:shoulder"`, child `"actuate:arm:*"` — child wildcard is broader than parent specific op. Currently correctly rejected, but no test guards against regression. |
+| S4-P3-05 | `tests.rs` | **No test for exactly `MAX_HOPS` (16 hops) succeeding.** Only 17-hop failure is tested. Off-by-one boundary at 16 is untested. Error variant in `max_hops_exceeded` test is not asserted (just `is_err()`). |
+| S4-P3-06 | `tests.rs` | **No test for `decode_pca_payload` with missing/invalid payload.** COSE envelope with `None` payload or non-JSON bytes — both error paths in crypto.rs:77-84 are untested. |
+| S4-P3-07 | `tests.rs` | **No test for deep wildcard nesting.** `"actuate:arm:*"` vs `"actuate:arm:shoulder:joint:alpha"` (5+ segments) untested. |
+| S4-P3-08 | `error.rs:36-37,71-72` | **Duplicate error messages.** `ValidationError::EmptyAuthorityChain` and `AuthorityError::EmptyChain` both say "authority chain must have at least one hop". Confusing for callers. |
+| S4-P3-09 | `error.rs:9,22` | **Error messages leak `p_0` and `kid` values.** `ProvenanceMismatch` and `UnknownKeyId` include internal identifiers verbatim — aids enumeration if exposed to network callers. |
+| S4-P3-10 | `crypto.rs:21` | **No length bound on `kid` in COSE protected header.** Arbitrarily long `kid` causes oversized protected header and memory amplification. Should cap at ~256 bytes. |
+| S4-P3-11 | `operations.rs:43-56` | **O(|child| * |parent|) complexity for wildcard matching.** `BTreeSet` sorted structure not exploited. Acceptable at current scale (small ops sets) but should be documented as a known bound. |
+| S4-P3-12 | `operations.rs:33` | **Misleading comment.** "Must be exactly the prefix or have more segments" does not explain why matching the bare prefix (no trailing colon) is intended. Comment should clarify or be removed if behavior is wrong (see S4-P1-06). |
 
 ---
 
@@ -182,6 +233,7 @@ Build: PASS. Tests: 64/64 PASS. Clippy: FAIL (1 lint error).
 - [x] **Step 3 — Physics checks (10)**: Pure functions, zero allocation, extensively tested.
 - [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all physics checks, clippy fix, unbounded collection caps. All R1-* and R2-01 through R2-07 fixed.
 - [x] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification, monotonicity, provenance.
+- [ ] **Step 4a — Fix P1 review findings**: Use decoded COSE payload instead of `claim` field, `verify_strict`, private `AuthorityChain` fields, `Operation::new` structural validation, remove `expect` panics, wildcard prefix semantics. **Fix S4-P1-01 through S4-P1-06.**
 - [ ] **Step 5 — Validator orchestrator**: Authority + physics -> signed verdict + optional signed actuation.
 - [ ] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
 - [ ] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
