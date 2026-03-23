@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 3a complete and reviewed. **Quality review identified 7 P1, 14 P2, and 13 P3 new/residual findings.** Most are profile/model validation gaps deferred to Step 20. 84 tests passing, clippy clean. Ready for Step 4 (authority validation).
+Phase 1, Step 4 complete. Ed25519 COSE_Sign1 authority chain validation implemented with A1 (provenance), A2 (monotonicity), A3 (continuity) checks. 122 tests passing, clippy clean. Ready for Step 5 (validator orchestrator).
 
 ## Completed Tasks
 
@@ -10,6 +10,7 @@ Phase 1, Step 3a complete and reviewed. **Quality review identified 7 P1, 14 P2,
 - [x] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. Fixed all 6 P1 and all 15 P2 findings from Step 2 review.
 - [x] **Step 3 — Physics checks (10)**: All 10 pure functions (P1-P10) implemented in `physics/` with `run_all_checks()` orchestrator and 64 passing tests.
 - [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all 10 physics checks, clippy fix, unbounded collection caps, reqwest removed, R2-01..R2-07 silent-skip fixes. 20 new tests (84 total).
+- [x] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification (crypto.rs), wildcard operation matching + subset checks (operations.rs), full PCA chain verification with A1/A2/A3 invariants + temporal constraints (chain.rs). AuthorityError enum with typed variants. 38 new tests (122 total).
 
 ---
 
@@ -180,7 +181,7 @@ Build: PASS. Tests: 64/64 PASS. Clippy: FAIL (1 lint error).
 - [x] **Step 2 — Core types**: All model structs with serde + validation. Newtypes for safety. Fixed all 6 P1 and all 15 P2 findings.
 - [x] **Step 3 — Physics checks (10)**: Pure functions, zero allocation, extensively tested.
 - [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all physics checks, clippy fix, unbounded collection caps. All R1-* and R2-01 through R2-07 fixed.
-- [ ] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification, monotonicity, provenance.
+- [x] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification, monotonicity, provenance.
 - [ ] **Step 5 — Validator orchestrator**: Authority + physics -> signed verdict + optional signed actuation.
 - [ ] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
 - [ ] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
