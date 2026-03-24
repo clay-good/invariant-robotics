@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 5 complete. **Validator orchestrator and signed actuation command generator implemented.** ValidatorConfig (profile-validated, pre-hashed), full pipeline (authority + physics -> signed verdict + optional actuation), fail-closed design, deterministic (caller-supplied `now`), 12 new tests. 150 tests passing, clippy clean. Ready for Step 5a (quality review) or Step 6 (signed audit logger).
+Phase 1, Step 5 complete and reviewed. **5 P1, 12 P2, 14 P3 findings** identified across validator.rs, actuator.rs, and cross-module integration. Key P1 issues: signer_kid not in actuation signature, empty required_ops bypasses authority, no size cap on PCA chain input, non-canonical verdict signature, unverified origin extraction (carry-forward). 150 tests passing, clippy clean. Ready for Step 5a (fix P1 findings).
 
 ## Completed Tasks
 
@@ -13,6 +13,60 @@ Phase 1, Step 5 complete. **Validator orchestrator and signed actuation command 
 - [x] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification (crypto.rs), wildcard operation matching + subset checks (operations.rs), full PCA chain verification with A1/A2/A3 invariants + temporal constraints (chain.rs). AuthorityError enum with typed variants. 38 new tests (122 total).
 - [x] **Step 4a — Fix P1 review findings**: Use decoded COSE payload (P1-01), verify_strict (P1-02), private AuthorityChain (P1-03), Operation structural validation (P1-04), sign_pca returns Result (P1-05), wildcard prefix fix (P1-06). Also ChainTooLong variant (P2-04), pub(crate) decode_pca_payload (P2-05), PartialEq on AuthorityError (P2-08). 16 new tests (138 total).
 - [x] **Step 5 — Validator orchestrator**: Full validation pipeline in `validator.rs` (ValidatorConfig, validate(), signed verdicts with 11 checks) and signed actuation command generator in `actuator.rs` (ActuationPayload signing, M1 invariant). Fail-closed, deterministic, SHA-256 hashing. 12 new tests (150 total).
+
+---
+
+## Review Findings — Step 5 Quality Review (2026-03-23)
+
+Reviewed: `validator.rs`, `actuator.rs`, cross-module integration with all models (verdict.rs, actuation.rs, command.rs, authority.rs, audit.rs, trace.rs), authority modules (chain.rs, operations.rs, crypto.rs), physics modules (10 checks + orchestrator), `lib.rs`, and spec compliance (sections 2.3, 3.3, 3.4).
+
+Build: PASS. Tests: 150/150 PASS. Clippy: PASS.
+
+### New P1 — Blocking / Security
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S5-P1-01 | `actuator.rs:18-23` | **`signer_kid` not covered by `actuation_signature`.** `ActuationPayload` omits `signer_kid`, so the signed payload does not bind the signature to a key identity. An attacker who intercepts a `SignedActuationCommand` can swap `signer_kid` to point to a different key. The motor controller cannot verify which key signed the payload from the payload alone. Fix: add `signer_kid` to `ActuationPayload`. |
+| S5-P1-02 | `validator.rs:200-212`, `276-281` | **No size cap on `pca_chain_b64` before decode — memory DoS.** An attacker can supply a megabyte-scale base64 string. `STANDARD.decode` and `serde_json::from_slice` allocate unbounded memory before the `MAX_HOPS=16` guard runs. Fix: add `const MAX_PCA_CHAIN_B64_BYTES: usize = 65_536` and reject before decode. |
+| S5-P1-03 | `validator.rs:run_authority`, `chain.rs:126` | **Empty `required_ops` bypasses all operation authorization.** A command with `required_ops: []` passes `check_required_ops` via vacuous truth and passes authority, producing an approved command with no operation constraints. Fix: reject empty `required_ops` in `run_authority` with `passed: false`. |
+| S5-P1-04 | `validator.rs:255-268`, `296-308` | **Verdict signed over non-canonical `operations_required` ordering.** `operations_required` is built from caller-supplied `Vec<Operation>` order. Two semantically identical commands with different `required_ops` ordering produce different `verdict_signature` values. Signature verification becomes order-dependent. Fix: sort `operations_required` and `operations_granted` before building `AuthoritySummary`. |
+| S5-P1-05 | `chain.rs:47-48` | **Origin extracted from unverified hop 0 before signature check (carry-forward S4a-P1-01).** `decode_pca_payload(&hops[0].raw, 0)` is called before the loop verifies hop 0's signature. Untrusted data shapes the A1 provenance baseline. Fix: move origin extraction to after hop 0 signature verification inside the loop. |
+
+### New P2 — Important / Correctness
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S5-P2-01 | `validator.rs:129-134` | **`command_hash` non-deterministic across processes.** `Command.metadata` is `HashMap<String, String>` — iteration order is non-deterministic. Two validator instances hashing the same logical command may produce different hashes. Fix: use `BTreeMap` for metadata or sort keys before hashing. |
+| S5-P2-02 | `validator.rs:75-80` | **`profile_hash` non-deterministic across processes.** `SafeStopProfile.target_joint_positions` is `HashMap<String, f64>`. Same problem as S5-P2-01. Fix: use `BTreeMap` or sort keys. |
+| S5-P2-03 | `validator.rs:128-134` | **`Command` has no `Validate` call before hashing/physics (carry-forward S4a-P2-10).** NaN fields, unbounded collections, negative `delta_time` reach physics checks unchecked. Unbounded `joint_states` / `metadata` / `required_ops` enable CPU/memory DoS. Fix: implement `Validate` for `Command` and call it at pipeline start. |
+| S5-P2-04 | `validator.rs:68-88` | **`signer_kid` accepts empty string.** Empty `signer_kid` propagates into `SignedVerdict` and `SignedActuationCommand`, defeating L3 (authenticity) invariant and motor controller key lookup. Fix: validate non-empty in `ValidatorConfig::new`. |
+| S5-P2-05 | `validator.rs:122-189` | **`command.timestamp` never validated against `now`.** Replay attacks: a command timestamped 10 seconds ago may reference a position that was safe then but not now. No staleness window enforced. Fix: reject `|now - command.timestamp| > max_command_age`. |
+| S5-P2-06 | `actuator.rs:31-63` | **NaN/Infinity in `JointState` reaches signing without guard.** `build_signed_actuation_command` is `pub` — a direct caller (bypassing `validate()`) can pass NaN joints, causing `serde_json::to_vec` to error. Fix: add finite-check guard at function entry. |
+| S5-P2-07 | `actuator.rs:39-44`, `validator.rs:173-183` | **Actuation `timestamp` uses validator `now`, not `command.timestamp`.** Motor controller cannot bind the actuation to the original command time. Replay defense relies on sequence number alone. Fix: include both `command_timestamp` and `validated_at` in `ActuationPayload`, or document design choice. |
+| S5-P2-08 | `verdict.rs:37-42` | **`#[serde(flatten)]` on `SignedVerdict` — key collision risk.** If `Verdict` ever gains a field named `verdict_signature` or `signer_kid`, serde silently drops one value. Also creates ambiguity for audit `entry_hash` scope. Fix: nest `Verdict` under explicit key or document constraint. |
+| S5-P2-09 | `validator.rs:147` | **No assertion that `run_all_checks` returns exactly 10 results.** If a physics check is added/removed, the count silently changes. A missing check could allow a malformed command. Fix: add `debug_assert_eq!(physics_checks.len(), 10)` and a constant `PHYSICS_CHECK_COUNT`. |
+| S5-P2-10 | `chain.rs:126`, `operations.rs:60-66` | **`required_ops` length unbounded — O(n*m) CPU DoS (carry-forward S4a-P2-05).** An attacker can supply thousands of `required_ops`. `check_required_ops` and `ops_are_subset` have quadratic complexity. Fix: cap `required_ops.len()` at 256. |
+| S5-P2-11 | `physics/stability.rs:45-52` | **Degenerate polygon (< 3 vertices) silently passes stability check (carry-forward).** A 2-vertex "polygon" makes P9 a no-op. Fix: reject degenerate polygons in profile validation or return `passed: false`. |
+| S5-P2-12 | `physics/acceleration.rs:63-69` | **Docstring contradicts implementation on missing previous joint state (carry-forward).** Doc says "skipped" but code flags as violation. Fix: align doc with implementation (violation is the safer choice). |
+
+### New P3 — Quality / Future-Proofing
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S5-P3-01 | `actuator.rs:13` | **Actuator imports `ValidatorError` — inverted dependency.** Leaf module depends on orchestrator solely for `Serialization` variant. Fix: move error to `models/error.rs`. |
+| S5-P3-02 | `validator.rs:40-47` | **Three separate error hierarchies** (`ValidatorError`, `AuthorityError`, `ValidationError`). No unified error type for downstream consumers. Fix: consolidate or re-export from `lib.rs`. |
+| S5-P3-03 | `lib.rs:1` | **`#![allow(dead_code)]` blanket suppression (carry-forward S4a-P3-05).** Hides dead safety code. Fix: remove and apply targeted allows. |
+| S5-P3-04 | `validator.rs:445+` | **Tests use `Utc::now()` instead of fixed timestamp.** Non-deterministic under clock skew. Fix: use fixed `DateTime` constants in all tests. |
+| S5-P3-05 | `validator.rs:154-155`, `289-309` | **Rejected verdict leaks `operations_granted`.** Info disclosure: attacker learns which ops their chain grants. Fix: omit granted ops on rejection. |
+| S5-P3-06 | `validator.rs:200-212` | **Internal decode error details exposed in verdict `details`.** Aids attackers in crafting payloads. Fix: use generic message externally, log detail internally. |
+| S5-P3-07 | `validator.rs:315-664` | **No test for empty `joint_states`.** Empty list passes all joint-based physics checks trivially, producing approved command with no joints. Fix: add test. |
+| S5-P3-08 | `validator.rs:315-664` | **No test for expired PCA at validator pipeline level.** Only tested at authority layer. Fix: add validator-level test. |
+| S5-P3-09 | `actuator.rs:73-105` | **No negative test for signature tampering.** No test mutates fields and asserts verification failure. Fix: add tampering test. |
+| S5-P3-10 | `actuator.rs:52`, `validator.rs:261` | **`use ed25519_dalek::Signer` inside function body.** Inconsistent with module-level imports. Fix: move to top. |
+| S5-P3-11 | `validator.rs:601` | **Verdict verification test uses `verify()` not `verify_strict()`.** Inconsistent with `crypto.rs` security posture. Fix: use `verify_strict()`. |
+| S5-P3-12 | `validator.rs:276-281` | **`decode_pca_chain` allocates unbounded `Vec<SignedPca>` before `MAX_HOPS` cap.** Pre-auth memory amplification. Fix: check `hops.len()` immediately after deserialize. |
+| S5-P3-13 | `validator.rs:107-110` | **`ValidationResult` has no audit entry slot.** API must be extended for Step 6. Fix: decide pattern now to avoid breaking changes. |
+| S5-P3-14 | `verdict.rs:28-34` | **`AuthoritySummary` uses `Vec<String>` instead of `Vec<Operation>` (carry-forward S4a-P3-13).** Newtype lost, ordering not guaranteed. Fix: change to `Vec<Operation>`. |
 
 ---
 
