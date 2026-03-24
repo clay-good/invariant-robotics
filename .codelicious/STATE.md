@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 6 complete. **Signed audit logger** implemented: `AuditLogger<W: Write>` with append-only hash-chained Ed25519-signed JSONL output. Enforces L1 (completeness), L2 (ordering via SHA-256 hash chain), L3 (authenticity via Ed25519 signatures), L4 (immutability via O_APPEND). `verify_log()` function validates hash chain + signatures + sequence monotonicity. 169 tests passing, clippy clean. Ready for Step 7 (watchdog).
+Phase 1, Step 7 complete. **Watchdog** implemented: `Watchdog` struct with `WatchdogConfig`, `WatchdogState` (Active/SafeStopTriggered/ManuallyReset), `WatchdogStatus` (Ok/SafeStopRequired/AlreadyTriggered), and `build_safe_stop_command`. Enforces W1 invariant (heartbeat timeout triggers safe-stop), CE7 defense (one-way transition, heartbeat is no-op after trigger), operator-initiated reset, `trigger_count` for audit, `time_remaining` query, and all `_at` variants for deterministic testing. 182 tests passing, clippy clean.
 
 ## Completed Tasks
 
@@ -15,6 +15,7 @@ Phase 1, Step 6 complete. **Signed audit logger** implemented: `AuditLogger<W: W
 - [x] **Step 5 — Validator orchestrator**: Full validation pipeline in `validator.rs` (ValidatorConfig, validate(), signed verdicts with 11 checks) and signed actuation command generator in `actuator.rs` (ActuationPayload signing, M1 invariant). Fail-closed, deterministic, SHA-256 hashing. 12 new tests (150 total).
 - [x] **Step 5a — Fix P1 review findings**: signer_kid in ActuationPayload (P1-01), MAX_PCA_CHAIN_B64_BYTES size cap (P1-02), empty required_ops rejection (P1-03), canonical operation ordering in verdict (P1-04), origin extraction after hop 0 verification (P1-05). 5 new tests (155 total).
 - [x] **Step 6 — Signed audit logger**: `AuditLogger<W: Write>` append-only hash-chained Ed25519-signed JSONL logger. L1 completeness (command+verdict stored), L2 ordering (SHA-256 hash chain), L3 authenticity (Ed25519 entry signatures), L4 immutability (O_APPEND file mode). `new()`/`resume()`/`open_file()` constructors, `log()` method, `verify_log()` verifier. 14 new tests (169 total).
+- [x] **Step 7 — Watchdog**: `Watchdog` struct enforcing W1 invariant. `WatchdogConfig` (timeout + SafeStopProfile), `WatchdogState` (Active/SafeStopTriggered/ManuallyReset), `WatchdogStatus` (Ok/SafeStopRequired/AlreadyTriggered). One-way safe-stop transition (CE7), operator reset, trigger_count audit field, time_remaining query, `_at` injected-instant variants for deterministic tests. `build_safe_stop_command` produces signed `SignedActuationCommand` with sentinel hash `"safe-stop:watchdog"`. 13 new tests (182 total).
 
 ---
 
@@ -348,8 +349,8 @@ Build: PASS. Tests: 64/64 PASS. Clippy: FAIL (1 lint error).
 - [x] **Step 4a — Fix P1 review findings**: Use decoded COSE payload instead of `claim` field, `verify_strict`, private `AuthorityChain` fields, `Operation::new` structural validation, remove `expect` panics, wildcard prefix semantics. **Fixed S4-P1-01 through S4-P1-06.**
 - [x] **Step 5 — Validator orchestrator**: Authority + physics -> signed verdict + optional signed actuation.
 - [x] **Step 5a — Fix P1 review findings**: All 5 P1 findings fixed (S5-P1-01 through S5-P1-05).
-- [ ] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
-- [ ] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
+- [x] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
+- [x] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
 - [ ] **Step 8 — Profile library**: 4 validated profiles (humanoid 28-DOF, Franka, quadruped, UR10).
 
 ### Phase 2: CLI
