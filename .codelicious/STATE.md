@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 7 complete. **Watchdog** implemented: `Watchdog` struct with `WatchdogConfig`, `WatchdogState` (Active/SafeStopTriggered/ManuallyReset), `WatchdogStatus` (Ok/SafeStopRequired/AlreadyTriggered), and `build_safe_stop_command`. Enforces W1 invariant (heartbeat timeout triggers safe-stop), CE7 defense (one-way transition, heartbeat is no-op after trigger), operator-initiated reset, `trigger_count` for audit, `time_remaining` query, and all `_at` variants for deterministic testing. 182 tests passing, clippy clean.
+Phase 1 complete (Steps 1-8). **Profile library** implemented: `profiles` module in `invariant-core` embeds 4 validated built-in profiles (humanoid 28-DOF, Franka Panda, quadruped 12-DOF, UR10). Public API: `load_builtin()`, `load_from_str()`, `load_from_file()`, `builtin_json()`, `BUILTIN_NAMES`. All profiles validated on load. 225 tests passing, clippy clean.
 
 ## Completed Tasks
 
@@ -16,6 +16,7 @@ Phase 1, Step 7 complete. **Watchdog** implemented: `Watchdog` struct with `Watc
 - [x] **Step 5a — Fix P1 review findings**: signer_kid in ActuationPayload (P1-01), MAX_PCA_CHAIN_B64_BYTES size cap (P1-02), empty required_ops rejection (P1-03), canonical operation ordering in verdict (P1-04), origin extraction after hop 0 verification (P1-05). 5 new tests (155 total).
 - [x] **Step 6 — Signed audit logger**: `AuditLogger<W: Write>` append-only hash-chained Ed25519-signed JSONL logger. L1 completeness (command+verdict stored), L2 ordering (SHA-256 hash chain), L3 authenticity (Ed25519 entry signatures), L4 immutability (O_APPEND file mode). `new()`/`resume()`/`open_file()` constructors, `log()` method, `verify_log()` verifier. 14 new tests (169 total).
 - [x] **Step 7 — Watchdog**: `Watchdog` struct enforcing W1 invariant. `WatchdogConfig` (timeout + SafeStopProfile), `WatchdogState` (Active/SafeStopTriggered/ManuallyReset), `WatchdogStatus` (Ok/SafeStopRequired/AlreadyTriggered). One-way safe-stop transition (CE7), operator reset, trigger_count audit field, time_remaining query, `_at` injected-instant variants for deterministic tests. `build_safe_stop_command` produces signed `SignedActuationCommand` with sentinel hash `"safe-stop:watchdog"`. 13 new tests (182 total).
+- [x] **Step 8 — Profile library**: `profiles` module embedding 4 validated built-in profiles (humanoid_28dof, franka_panda, quadruped_12dof, ur10). `load_builtin()`, `load_from_str()`, `load_from_file()`, `builtin_json()` API. Per-robot structural checks (joint counts/names/groups, stability config, safe-stop positions within limits, workspace bounds). Cross-profile invariants (finite limits, valid velocity scales, positive watchdog timeouts). Round-trip serde, error paths. 43 new tests (225 total).
 
 ---
 
