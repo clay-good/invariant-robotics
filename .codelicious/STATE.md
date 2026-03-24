@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 4a complete. **All 6 P1 findings fixed**, plus 3 P2 findings (P2-04, P2-05, P2-08). 138 tests passing, clippy clean. Ready for Step 5 (validator orchestrator).
+Phase 1, Step 4a complete and reviewed. **All 6 Step 4 P1 findings fixed.** Post-fix review identified **2 new P1, 13 P2, 14 P3 findings** — predominantly carry-forward profile validation gaps (NaN in profile fields) and test coverage gaps. 138 tests passing, clippy clean. Ready for Step 5 (validator orchestrator).
 
 ## Completed Tasks
 
@@ -12,6 +12,60 @@ Phase 1, Step 4a complete. **All 6 P1 findings fixed**, plus 3 P2 findings (P2-0
 - [x] **Step 3a — Fix P1 review findings**: NaN/Inf guards in all 10 physics checks, clippy fix, unbounded collection caps, reqwest removed, R2-01..R2-07 silent-skip fixes. 20 new tests (84 total).
 - [x] **Step 4 — Authority validation**: Ed25519 COSE_Sign1 chain verification (crypto.rs), wildcard operation matching + subset checks (operations.rs), full PCA chain verification with A1/A2/A3 invariants + temporal constraints (chain.rs). AuthorityError enum with typed variants. 38 new tests (122 total).
 - [x] **Step 4a — Fix P1 review findings**: Use decoded COSE payload (P1-01), verify_strict (P1-02), private AuthorityChain (P1-03), Operation structural validation (P1-04), sign_pca returns Result (P1-05), wildcard prefix fix (P1-06). Also ChainTooLong variant (P2-04), pub(crate) decode_pca_payload (P2-05), PartialEq on AuthorityError (P2-08). 16 new tests (138 total).
+
+---
+
+## Review Findings — Step 4a Post-Fix Quality Review (2026-03-23)
+
+Reviewed: all authority modules (crypto.rs, operations.rs, chain.rs, tests.rs, mod.rs), all models (authority.rs, profile.rs, command.rs, verdict.rs, actuation.rs, audit.rs, trace.rs, error.rs), all physics modules (10 checks + orchestrator + tests), workspace config (Cargo.toml), stub crates.
+
+Build: PASS. Tests: 138/138 PASS. Clippy: PASS.
+
+**Step 4 P1 fix verification:** All 6 P1 fixes (P1-01 through P1-06) are correctly applied. No bypass vectors found.
+
+### New P1 — Blocking / Security
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S4a-P1-01 | `chain.rs:47-48` | **Origin extracted from unverified hop 0 before signature check.** `decode_pca_payload(&hops[0].raw, 0)` is called before the loop verifies hop 0's signature. The `origin` variable is set from an unverified payload. While the loop later re-verifies hop 0's signature and re-decodes its payload for the A1 check (which trivially passes since `origin` came from the same hop), this means: (a) error messages from a malformed-but-unsigned hop 0 leak payload structure before authentication, and (b) there is no enforcement that hop 0's `p_0` matches a known/trusted root identity — any holder of a trusted key can self-issue a chain with arbitrary `p_0`. Fix: move origin extraction to after hop 0 verification completes, or document that root principal validation is the caller's responsibility. |
+| S4a-P1-02 | `crypto.rs:87` | **Unbounded `kid` length in COSE protected header causes pre-auth memory DoS.** `extract_kid` clones `key_id` bytes with no length cap before signature verification. An attacker-supplied COSE blob with a multi-megabyte `kid` causes unbounded allocation on every hop. Carry-forward from S4-P3-10, elevated to P1 as pre-auth DoS. Fix: add `if kid_bytes.len() > 256 { return Err(...) }`. |
+
+### New P2 — Important / Correctness
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S4a-P2-01 | `chain.rs:54-66`, `authority.rs:119` | **COSE header `kid` not cross-checked against payload `Pca.kid`.** After verification, the `kid` from the COSE protected header (used for key lookup) is not compared to `claim.kid` from the decoded payload. An issuer can sign with header `kid="key-A"` but include `kid="key-B"` in the JSON payload, poisoning audit trails. Fix: assert `claim.kid == kid` after decode. |
+| S4a-P2-02 | `chain.rs:78-91` | **A2 error reporting uses inline traversal with `unwrap_or_default("")`.** Redundant re-traversal for error reporting; empty fallback string misleading in audit logs. Should use `first_uncovered_op`. Carry-forward S4-P2-10. |
+| S4a-P2-03 | `authority.rs:115,119` | **`Pca.p_0` and `Pca.kid` not validated as non-empty.** Empty values make A1 trivially pass and key lookup ambiguous. Carry-forward S4-P2-01/02. |
+| S4a-P2-04 | `authority.rs:120-123` | **No `nbf < exp` consistency check on `Pca`.** Inverted/zero-width windows accepted. Carry-forward S4-P2-03. |
+| S4a-P2-05 | `authority.rs:117` | **`Pca.ops` unbounded `BTreeSet`.** No max size cap; O(n^2) monotonicity check enables CPU exhaustion via large ops sets. Carry-forward R2-10. |
+| S4a-P2-06 | `profile.rs:182-216` | **NaN/Inf not rejected in `JointDefinition` f64 fields.** `NaN >= NaN` is false, bypassing inverted-limits check. `NaN <= 0.0` is false, bypassing positivity checks. NaN profile values silently disable P1/P2/P3 physics checks. Carry-forward S3a-P1-03. |
+| S4a-P2-07 | `profile.rs:146-151` | **NaN `global_velocity_scale` bypasses range check.** Both `NaN <= 0.0` and `NaN > 1.0` are false. `max_delta_time` and `min_collision_distance` have no validation. Carry-forward S3a-P1-04. |
+| S4a-P2-08 | `profile.rs:247-276` | **`ExclusionZone`/`ProximityZone` geometry not validated.** NaN radius/bounds silently bypass P6/P10. Carry-forward S3a-P1-02. |
+| S4a-P2-09 | `profile.rs:226-239` | **`WorkspaceBounds::validate()` does not check NaN/Inf.** NaN bounds pass validation; P5 silently passes all positions. Carry-forward S3a-P2-01. |
+| S4a-P2-10 | `command.rs:7-48` | **`Command` has no `Validate` impl.** Primary ingress type has unbounded collections, unchecked `delta_time`, uncapped `metadata`. Carry-forward S3a-P1-05. |
+| S4a-P2-11 | `exclusion_zones.rs:92`, `proximity.rs:158`, `self_collision.rs:89` | **Squared-distance overflow for large-but-finite coordinates.** Coordinates near `f64::MAX/2` cause `dx*dx` to overflow to `+Inf`, treating points as outside zones. Bypasses P6/P7/P10. Carry-forward S3a-P1-06/07. |
+| S4a-P2-12 | `tests.rs` (authority) | **No test for payload-swap attack vector (original P1-01 scenario).** Tampered-raw test only flips bytes; no test constructs a semantically different payload. Also: no test distinguishes `verify_strict` from `verify`; `extract_kid` non-UTF-8 path untested; `decode_pca_payload` detached-payload path untested. Carry-forward S4-P3-01/06. |
+| S4a-P2-13 | `tests.rs` (physics) | **`run_all_checks` integration tests never trigger P4 or P10 failures.** `previous_joints=None` causes P4 to pass trivially; no proximity zones configured for P10. Carry-forward R3-03/S3a-P3-04. |
+
+### New P3 — Quality / Future-Proofing
+
+| ID | File:Line | Issue |
+|----|-----------|-------|
+| S4a-P3-01 | `crypto.rs:59-64` | Signature error type lost — both parse and verify errors collapse to `String`. Carry-forward S4-P2-09. |
+| S4a-P3-02 | `error.rs:6,78` | Duplicate error messages for `EmptyChain` / `EmptyAuthorityChain`. Carry-forward S4-P3-08. |
+| S4a-P3-03 | `error.rs:15-19,28-30` | `p_0` and `kid` leaked verbatim in error messages — enumeration risk if exposed externally. Carry-forward S4-P3-09. |
+| S4a-P3-04 | `operations.rs:43-47` | O(n*m) complexity undocumented, no size bound enforced on ops sets. Carry-forward S4-P3-11. |
+| S4a-P3-05 | `lib.rs:1` | Crate-wide `#![allow(dead_code)]` masks unused variants and dead code. Carry-forward R3-11. |
+| S4a-P3-06 | `profile.rs:17-21` | `BoundsType` enum is dead code, never referenced. Carry-forward S3a-P3-05. |
+| S4a-P3-07 | `profile.rs:298-308` | `StabilityConfig` has no `Validate` impl. `com_height_estimate` and polygon vertices unchecked. Carry-forward S3a-P2-02. |
+| S4a-P3-08 | `profile.rs:310-333` | `SafeStopProfile` has no `Validate` impl. `max_deceleration` can be NaN/zero/negative. Carry-forward S3a-P2-03. |
+| S4a-P3-09 | `acceleration.rs:14-16` | Stale doc comment says missing previous joint is "skipped" but implementation flags it as violation. Carry-forward S3a-P2-13. |
+| S4a-P3-10 | `exclusion_zones.rs:89-98`, `proximity.rs:156-163` | `point_in_sphere` copy-pasted in two modules. Carry-forward S3a-P3-03/R3-05. |
+| S4a-P3-11 | `joint_limits.rs:19` (and 4 others) | O(n*m) linear-scan joint lookup in all 5 per-joint checks. Carry-forward S3a-P3-10. |
+| S4a-P3-12 | `delta_time.rs:17,23` | Misleading error messages: "not finite" for zero delta_time; "exceeds" for NaN max_delta_time. Carry-forward S3a-P3-11. |
+| S4a-P3-13 | `verdict.rs:29-33` | `AuthoritySummary` uses `Vec<String>` instead of `Vec<Operation>` — newtype lost. Carry-forward S3a-P3-06. |
+| S4a-P3-14 | `tests.rs` (physics) | Missing tests: `NEG_INFINITY` delta_time, `max_delta_time=0.0`, self-referential `CollisionPair`, P4 unknown joint, P9 NaN in `com[1]`/`com[2]` individually. Carry-forward S3a-P3-12. |
 
 ---
 
