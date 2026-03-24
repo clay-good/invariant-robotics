@@ -1,10 +1,16 @@
 use thiserror::Error;
 
 /// Errors produced during PCA chain verification (A1, A2, A3).
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum AuthorityError {
     #[error("authority chain must have at least one hop")]
     EmptyChain,
+
+    #[error("chain has {len} hops, exceeding maximum of {max}")]
+    ChainTooLong { len: usize, max: usize },
+
+    #[error("serialization failed: {reason}")]
+    SerializationError { reason: String },
 
     #[error("A1 provenance violation: p_0 differs at hop {hop} (expected {expected:?}, got {got:?})")]
     ProvenanceMismatch {

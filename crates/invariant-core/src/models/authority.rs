@@ -48,6 +48,28 @@ impl Operation {
         {
             return Err(ValidationError::InvalidOperation(s));
         }
+        // Reject consecutive colons
+        if s.contains("::") {
+            return Err(ValidationError::InvalidOperation(s));
+        }
+        // Reject leading or trailing colons
+        if s.starts_with(':') || s.ends_with(':') {
+            return Err(ValidationError::InvalidOperation(s));
+        }
+        // Wildcard: only valid as bare "*" or trailing ":*"
+        if s.contains('*') {
+            if s == "*" {
+                // bare wildcard OK
+            } else if s.ends_with(":*") {
+                // trailing wildcard OK, but no * in the prefix
+                let prefix = &s[..s.len() - 2];
+                if prefix.contains('*') {
+                    return Err(ValidationError::InvalidOperation(s));
+                }
+            } else {
+                return Err(ValidationError::InvalidOperation(s));
+            }
+        }
         Ok(Self(s))
     }
 
@@ -101,28 +123,53 @@ pub struct Pca {
     pub nbf: Option<DateTime<Utc>>,
 }
 
-/// A COSE_Sign1-encoded PCA: raw bytes for signature verification plus decoded claim.
+/// A COSE_Sign1-encoded PCA: raw bytes for signature verification.
 ///
-/// Both fields are serialisable so the chain can appear in audit logs and verdicts.
+/// The claim is decoded from the COSE payload during chain verification,
+/// not stored alongside the raw bytes (prevents claim/payload mismatch attacks).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedPca {
     /// Raw COSE_Sign1 bytes (base64-encoded in JSON).
     #[serde(with = "base64_bytes")]
     pub raw: Vec<u8>,
-    /// Decoded PCA claim (used for chain validation logic).
-    pub claim: Pca,
 }
 
 /// A validated, decoded PIC authority chain.
 ///
-/// Produced by `pic::chain` after verifying A1 (provenance), A2 (monotonicity),
-/// and A3 (continuity) invariants across all hops.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Produced by `authority::chain::verify_chain` after verifying A1 (provenance),
+/// A2 (monotonicity), and A3 (continuity) invariants across all hops.
+///
+/// Fields are private — only `verify_chain` can construct this type, preventing
+/// callers from forging a validated chain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AuthorityChain {
-    /// The ordered sequence of verified signed PCAs (at least one hop required).
-    pub hops: Vec<SignedPca>,
-    /// The origin principal (p_0) — invariant across all hops (A1).
-    pub origin_principal: String,
-    /// The narrowest set of operations after monotonicity reduction (A2).
-    pub final_ops: BTreeSet<Operation>,
+    hops: Vec<SignedPca>,
+    origin_principal: String,
+    final_ops: BTreeSet<Operation>,
+}
+
+impl AuthorityChain {
+    pub(crate) fn new(
+        hops: Vec<SignedPca>,
+        origin_principal: String,
+        final_ops: BTreeSet<Operation>,
+    ) -> Self {
+        Self {
+            hops,
+            origin_principal,
+            final_ops,
+        }
+    }
+
+    pub fn hops(&self) -> &[SignedPca] {
+        &self.hops
+    }
+
+    pub fn origin_principal(&self) -> &str {
+        &self.origin_principal
+    }
+
+    pub fn final_ops(&self) -> &BTreeSet<Operation> {
+        &self.final_ops
+    }
 }

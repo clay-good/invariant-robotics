@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::VerifyingKey;
 
-use crate::models::authority::{AuthorityChain, Operation, SignedPca};
+use crate::models::authority::{AuthorityChain, Operation, Pca, SignedPca};
 use crate::models::error::AuthorityError;
 
-use super::crypto::verify_signed_pca;
+use super::crypto::{decode_pca_payload, extract_kid, verify_signed_pca};
 use super::operations::ops_are_subset;
 
 /// Maximum number of hops allowed in a chain (DoS guard).
@@ -19,10 +19,11 @@ const MAX_HOPS: usize = 16;
 /// Checks performed (in order for each hop):
 ///
 /// 1. **A3 — Continuity**: Ed25519 signature over COSE_Sign1 envelope is valid
-///    for the key identified by `kid`.
-/// 2. **A1 — Provenance**: `p_0` is identical across all hops.
+///    for the key identified by `kid` (extracted from the COSE protected header).
+/// 2. **A1 — Provenance**: `p_0` is identical across all hops (decoded from
+///    the verified COSE payload, not from any unverified sidecar field).
 /// 3. **A2 — Monotonicity**: `ops` at hop *i+1* is a subset of `ops` at hop *i*.
-/// 4. **Temporal**: `now` is within `[nbf, exp]` for each hop (if present).
+/// 4. **Temporal**: `now` is within `[nbf, exp)` for each hop (if present).
 ///
 /// `trusted_keys` maps `kid` strings to their Ed25519 verifying keys.
 pub fn verify_chain(
@@ -35,28 +36,37 @@ pub fn verify_chain(
     }
 
     if hops.len() > MAX_HOPS {
-        return Err(AuthorityError::CoseError {
-            hop: hops.len() - 1,
-            reason: format!("chain has {} hops, exceeding maximum of {MAX_HOPS}", hops.len()),
+        return Err(AuthorityError::ChainTooLong {
+            len: hops.len(),
+            max: MAX_HOPS,
         });
     }
 
-    let origin = &hops[0].claim.p_0;
+    // Decode origin from the first hop's COSE payload (pre-verification decode
+    // for the origin principal; the signature is verified inside the loop).
+    let origin_claim = decode_pca_payload(&hops[0].raw, 0)?;
+    let origin = origin_claim.p_0.clone();
+
+    let mut decoded_claims: Vec<Pca> = Vec::with_capacity(hops.len());
 
     for (i, signed) in hops.iter().enumerate() {
-        let claim = &signed.claim;
+        // Extract kid from the COSE protected header (covered by signature).
+        let kid = extract_kid(&signed.raw, i)?;
 
         // A3: Signature verification.
-        let key = trusted_keys.get(&claim.kid).ok_or_else(|| {
+        let key = trusted_keys.get(&kid).ok_or_else(|| {
             AuthorityError::UnknownKeyId {
                 hop: i,
-                kid: claim.kid.clone(),
+                kid: kid.clone(),
             }
         })?;
         verify_signed_pca(signed, key, i)?;
 
-        // A1: Provenance — p_0 must be immutable.
-        if &claim.p_0 != origin {
+        // Decode the verified COSE payload — this is the trusted claim.
+        let claim = decode_pca_payload(&signed.raw, i)?;
+
+        // A1: Provenance — p_0 must be immutable across all hops.
+        if claim.p_0 != origin {
             return Err(AuthorityError::ProvenanceMismatch {
                 hop: i,
                 expected: origin.clone(),
@@ -66,9 +76,8 @@ pub fn verify_chain(
 
         // A2: Monotonicity — ops must narrow (be a subset of parent).
         if i > 0 {
-            let parent_ops = &hops[i - 1].claim.ops;
+            let parent_ops = &decoded_claims[i - 1].ops;
             if !ops_are_subset(&claim.ops, parent_ops) {
-                // Find the first offending op for the error message.
                 let bad = claim
                     .ops
                     .iter()
@@ -100,15 +109,17 @@ pub fn verify_chain(
                 });
             }
         }
+
+        decoded_claims.push(claim);
     }
 
-    let final_hop = hops.last().unwrap();
+    let final_ops = decoded_claims.last().unwrap().ops.clone();
 
-    Ok(AuthorityChain {
-        hops: hops.to_vec(),
-        origin_principal: origin.clone(),
-        final_ops: final_hop.claim.ops.clone(),
-    })
+    Ok(AuthorityChain::new(
+        hops.to_vec(),
+        origin,
+        final_ops,
+    ))
 }
 
 /// Verify that the chain's final ops cover all required operations.
@@ -116,7 +127,7 @@ pub fn check_required_ops(
     chain: &AuthorityChain,
     required: &[Operation],
 ) -> Result<(), AuthorityError> {
-    if let Some(uncovered) = super::operations::first_uncovered_op(&chain.final_ops, required) {
+    if let Some(uncovered) = super::operations::first_uncovered_op(chain.final_ops(), required) {
         return Err(AuthorityError::InsufficientOps {
             op: uncovered.as_str().to_owned(),
         });

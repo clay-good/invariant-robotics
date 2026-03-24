@@ -27,11 +27,11 @@ pub fn operation_matches(granted: &Operation, required: &Operation) -> bool {
         return true;
     }
 
-    // Check trailing wildcard: "prefix:*" covers "prefix:anything".
+    // Check trailing wildcard: "prefix:*" covers "prefix:child" and deeper.
+    // Does NOT cover the bare prefix itself (e.g., "a:b:*" does not cover "a:b").
     if let Some(prefix) = g.strip_suffix(":*") {
         if let Some(rest) = r.strip_prefix(prefix) {
-            // Must be exactly the prefix or have more segments.
-            return rest.is_empty() || rest.starts_with(':');
+            return rest.starts_with(':');
         }
     }
 
