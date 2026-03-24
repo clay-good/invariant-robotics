@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 7 complete. Watchdog heartbeat monitor implemented in `crates/invariant-core/src/watchdog.rs`. Enforces W1 invariant: if no heartbeat for >N ms, generates signed safe-stop actuation command. `WatchdogState` (Armed/Triggered) with one-way latch semantics, operator reset required. Supports ControlledCrouch, ParkPosition, and ImmediateStop strategies. 174 tests passing, clippy clean (13 new watchdog tests).
+Phase 1 complete (Steps 1-8). Profile library implemented in `crates/invariant-core/src/profiles.rs`. Embeds all 4 robot profiles at compile time with `load_builtin()`, `list_builtins()`, `load_from_json()`, `load_from_bytes()` APIs. 256 KiB size cap on custom profiles. `ProfileError` enum with typed variants. 187 tests passing, clippy clean (13 new profile library tests).
 
 ## Completed Tasks
 
@@ -16,6 +16,7 @@ Phase 1, Step 7 complete. Watchdog heartbeat monitor implemented in `crates/inva
 - [x] **Step 5a — Fix P1 review findings**: signer_kid covered by actuation signature (P1-01), 64 KiB PCA chain size cap before decode (P1-02), empty required_ops rejection (P1-03), canonical operation ordering in verdict signature (P1-04), origin extraction after hop 0 signature verification (P1-05). 4 new tests (154 total).
 - [x] **Step 6 — Signed audit logger**: `AuditLogger` (append-only JSONL, hash chain, Ed25519 per-entry signatures), `AuditError` (thiserror), `verify_audit_log()` (full chain + signature verification). `AuditEntryPayload` helper for circularity-free hashing. `tempfile` dev-dependency added. 7 new tests (161 total).
 - [x] **Step 7 — Watchdog**: `Watchdog` struct (heartbeat monitor, safe-stop trigger), `WatchdogState` enum (Armed/Triggered one-way latch), `WatchdogError` (thiserror). Deterministic design — caller-supplied monotonic timestamps, no I/O. `check()` generates `SignedActuationCommand` on timeout via `build_signed_actuation_command`. Supports `ControlledCrouch`, `ParkPosition`, `ImmediateStop` strategies. Deterministic joint ordering (sorted by name). `reset()` for operator recovery. 13 new tests (174 total).
+- [x] **Step 8 — Profile library**: `profiles` module in `invariant-core` embeds all 4 robot profile JSON files (humanoid_28dof, franka_panda, quadruped_12dof, ur10) at compile time. `load_builtin(name)` parses + validates by name. `list_builtins()` enumerates available profiles. `load_from_json()` / `load_from_bytes()` for custom profiles with 256 KiB size cap. `ProfileError` enum. Round-trip serialization verified. 13 new tests (187 total).
 
 ---
 
