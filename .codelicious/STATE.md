@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1, Step 6 complete. **Signed audit logger** implemented: `AuditLogger<W: Write>` with append-only hash-chained Ed25519-signed JSONL output. Enforces L1 (completeness), L2 (ordering via SHA-256 hash chain), L3 (authenticity via Ed25519 signatures), L4 (immutability via O_APPEND). `verify_log()` function validates hash chain + signatures + sequence monotonicity. 169 tests passing, clippy clean. Ready for Step 7 (watchdog).
+Phase 3 in progress (Step 12 complete). Eval presets implemented with safety-check, completeness-check, and regression-check. CLI `invariant eval` wired up. 264 tests passing, clippy clean (23 new eval tests).
 
 ## Completed Tasks
 
@@ -15,6 +15,16 @@ Phase 1, Step 6 complete. **Signed audit logger** implemented: `AuditLogger<W: W
 - [x] **Step 5 — Validator orchestrator**: Full validation pipeline in `validator.rs` (ValidatorConfig, validate(), signed verdicts with 11 checks) and signed actuation command generator in `actuator.rs` (ActuationPayload signing, M1 invariant). Fail-closed, deterministic, SHA-256 hashing. 12 new tests (150 total).
 - [x] **Step 5a — Fix P1 review findings**: signer_kid in ActuationPayload (P1-01), MAX_PCA_CHAIN_B64_BYTES size cap (P1-02), empty required_ops rejection (P1-03), canonical operation ordering in verdict (P1-04), origin extraction after hop 0 verification (P1-05). 5 new tests (155 total).
 - [x] **Step 6 — Signed audit logger**: `AuditLogger<W: Write>` append-only hash-chained Ed25519-signed JSONL logger. L1 completeness (command+verdict stored), L2 ordering (SHA-256 hash chain), L3 authenticity (Ed25519 entry signatures), L4 immutability (O_APPEND file mode). `new()`/`resume()`/`open_file()` constructors, `log()` method, `verify_log()` verifier. 14 new tests (169 total).
+- [x] **Step 7 — Watchdog**: `Watchdog` struct (heartbeat monitor, safe-stop trigger), `WatchdogState` enum (Armed/Triggered one-way latch), `WatchdogError` (thiserror). Deterministic design — caller-supplied monotonic timestamps, no I/O. `check()` generates `SignedActuationCommand` on timeout via `build_signed_actuation_command`. Supports `ControlledCrouch`, `ParkPosition`, `ImmediateStop` strategies. Deterministic joint ordering (sorted by name). `reset()` for operator recovery. 13 new tests (174 total).
+- [x] **Step 8 — Profile library**: `profiles` module in `invariant-core` embeds all 4 robot profile JSON files (humanoid_28dof, franka_panda, quadruped_12dof, ur10) at compile time. `load_builtin(name)` parses + validates by name. `list_builtins()` enumerates available profiles. `load_from_json()` / `load_from_bytes()` for custom profiles with 256 KiB size cap. `ProfileError` enum. Round-trip serialization verified. 13 new tests (187 total).
+
+### Phase 2: CLI
+- [x] **Step 9 — CLI**: Full clap CLI with 5 working subcommands. `validate` supports single/batch/stdin input, guardian/shadow/forge modes, writes audit log. `keygen` generates Ed25519 keypairs to JSON. `audit` displays JSONL entries with --last N. `verify` checks hash chain + signatures. `inspect` shows profile summary. Key file module (`key_file.rs`) with load/write/decode helpers. eval/diff/campaign/serve remain stubs for later steps. 16 new tests (203 total).
+- [x] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum. POST /validate (full validation pipeline with JSON request/response), POST /heartbeat (watchdog timer feed), GET /health (server status). Trust-plane mode (--trust-plane) auto-issues self-signed PCA chains. Watchdog configurable via --watchdog-timeout-ms (default 500ms, 0 disables). Shared state via Arc + tokio::sync::Mutex. Dependencies: axum 0.8, tower 0.5 (dev). 8 new tests (211 total).
+- [x] **Step 11 — Key management**: Production-quality key management system. `validate_kid()` rejects empty, >128 byte, or unsafe-character KIDs. SHA-256 `fingerprint()` for out-of-band key verification. `export_public_key()` creates public-key-only files. `--export-pub` flag on `keygen` writes shareable public key file. `--force` flag for overwrite protection. `write_key_file_secure()` sets 0600 permissions on Unix for secret-containing files. KID validation on all key file loads. `sha2` dependency added to CLI crate. 31 new tests (242 total).
+
+### Phase 3: Eval
+- [x] **Step 12 — Eval presets**: Three deterministic eval presets in `invariant-eval/src/presets.rs`: `safety-check` (verifies all physics/authority checks pass per step), `completeness-check` (step sequencing, timestamp ordering, 11 expected checks per verdict), `regression-check` (single-trace consistency + two-trace verdict comparison). `EvalReport` + `EvalFinding` + `Severity` types with serde. CLI `invariant eval --preset <name> <trace.json>` reads traces, runs presets, outputs JSON reports. `--list-presets` flag. Exit codes 0/1/2. `invariant-eval` added as CLI dependency. `chrono` dev-dependency for eval tests. 23 new tests (264 total).
 
 ---
 

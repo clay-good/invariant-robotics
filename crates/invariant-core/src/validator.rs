@@ -294,7 +294,7 @@ const MAX_PCA_CHAIN_B64_BYTES: usize = 65_536;
 fn decode_pca_chain(pca_chain_b64: &str) -> Result<Vec<SignedPca>, String> {
     if pca_chain_b64.len() > MAX_PCA_CHAIN_B64_BYTES {
         return Err(format!(
-            "PCA chain base64 exceeds size limit ({} > {MAX_PCA_CHAIN_B64_BYTES})",
+            "PCA chain too large: {} bytes exceeds {MAX_PCA_CHAIN_B64_BYTES} byte limit",
             pca_chain_b64.len()
         ));
     }
@@ -667,7 +667,7 @@ mod tests {
         assert!(!result.signed_verdict.verdict.approved);
         let auth = &result.signed_verdict.verdict.checks[0];
         assert!(!auth.passed);
-        assert!(auth.details.contains("exceeds size limit"));
+        assert!(auth.details.contains("too large"));
     }
 
     #[test]
@@ -783,4 +783,5 @@ mod tests {
             2
         );
     }
+
 }
