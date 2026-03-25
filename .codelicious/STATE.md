@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 2 in progress (Step 9 complete). **CLI** implemented: 5 working subcommands (`validate`, `keygen`, `inspect`, `audit`, `verify`) plus 4 stubs for later phases (`eval`, `diff`, `campaign`, `serve`). Full validation pipeline wired end-to-end: load profile + keys + command JSON, run authority + physics, output signed verdict. 229 tests passing, clippy clean.
+Phase 2 in progress (Step 10 complete). **Embedded Trust Plane** implemented: `invariant serve` runs an axum HTTP server with 4 endpoints (`POST /validate`, `POST /heartbeat`, `GET /health`, `GET /watchdog`). Full validation pipeline exposed over HTTP with watchdog integration, previous-joints tracking, and safe-stop command generation. 6 working subcommands + 3 stubs. 234 tests passing, clippy clean.
 
 ## Completed Tasks
 
@@ -20,6 +20,7 @@ Phase 2 in progress (Step 9 complete). **CLI** implemented: 5 working subcommand
 
 ### Phase 2: CLI
 - [x] **Step 9 — CLI**: Clap-based `invariant` binary with all 9 subcommands from Section 5. 5 fully implemented: `validate` (single/batch/stdin command validation with signed verdict output, guardian/shadow modes, exit 0=approved/1=rejected/2=error), `keygen` (Ed25519 keypair generation to JSON key file), `inspect` (human-readable profile summary), `audit` (JSONL log viewer with --last N), `verify` (hash chain + signature verification). 4 stubs for later phases: `eval` (Step 12), `diff` (Step 15), `campaign` (Step 19), `serve` (Step 10). Added base64, rand, ed25519-dalek, chrono, sha2 deps. 4 new tests (229 total).
+- [x] **Step 10 — Embedded Trust Plane**: `invariant serve` axum HTTP server with 4 endpoints: `POST /validate` (command validation returning SignedVerdict + optional SignedActuationCommand), `POST /heartbeat` (watchdog heartbeat), `GET /health` (server status with watchdog state, profile name, signer identity), `GET /watchdog` (check timeout, returns safe-stop command if triggered). Arc-shared state with Mutex-protected watchdog and previous_joints tracking. `--trust-plane` flag accepted. Dependencies added: axum 0.8, tokio net feature, tower (dev). 5 new tests (234 total).
 
 ---
 
