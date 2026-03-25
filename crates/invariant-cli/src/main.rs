@@ -45,7 +45,7 @@ fn main() {
         Commands::Diff(_) => commands::diff::run_stub(),
         Commands::Campaign(_) => commands::campaign::run_stub(),
         Commands::Keygen(ref args) => commands::keygen::run(args),
-        Commands::Serve(_) => commands::serve::run_stub(),
+        Commands::Serve(ref args) => commands::serve::run(args),
     };
     std::process::exit(exit_code);
 }
