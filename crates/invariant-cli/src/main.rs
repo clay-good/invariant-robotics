@@ -42,7 +42,7 @@ fn main() {
         Commands::Verify(args) => commands::verify::run(&args),
         Commands::Inspect(args) => commands::inspect::run(&args),
         Commands::Keygen(args) => commands::keygen::run(&args),
-        Commands::Eval(_) => commands::eval::run_stub(),
+        Commands::Eval(args) => commands::eval::run(&args),
         Commands::Diff(_) => commands::diff::run_stub(),
         Commands::Campaign(_) => commands::campaign::run_stub(),
         Commands::Serve(args) => commands::serve::run(&args),
