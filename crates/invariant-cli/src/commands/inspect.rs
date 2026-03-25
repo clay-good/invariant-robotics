@@ -1,7 +1,6 @@
 use clap::Args;
-use std::path::PathBuf;
-
 use invariant_core::models::profile::{JointType, SafeStopStrategy, WorkspaceBounds};
+use std::path::PathBuf;
 
 #[derive(Args)]
 pub struct InspectArgs {

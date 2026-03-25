@@ -358,14 +358,14 @@ Build: PASS. Tests: 64/64 PASS. Clippy: FAIL (1 lint error).
 - [x] **Step 4a — Fix P1 review findings**: Use decoded COSE payload instead of `claim` field, `verify_strict`, private `AuthorityChain` fields, `Operation::new` structural validation, remove `expect` panics, wildcard prefix semantics. **Fixed S4-P1-01 through S4-P1-06.**
 - [x] **Step 5 — Validator orchestrator**: Authority + physics -> signed verdict + optional signed actuation.
 - [x] **Step 5a — Fix P1 review findings**: All 5 P1 findings fixed (S5-P1-01 through S5-P1-05).
-- [ ] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
-- [ ] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
-- [ ] **Step 8 — Profile library**: 4 validated profiles (humanoid 28-DOF, Franka, quadruped, UR10).
+- [x] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
+- [x] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
+- [x] **Step 8 — Profile library**: 4 validated profiles (humanoid 28-DOF, Franka, quadruped, UR10).
 
 ### Phase 2: CLI
-- [ ] **Step 9 — CLI**: clap-based, all subcommands. **Fix R2-16, R2-17, R3-10.**
-- [ ] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum.
-- [ ] **Step 11 — Key management**: `invariant keygen`, key file format.
+- [x] **Step 9 — CLI**: clap-based, all subcommands. **Fix R2-16, R2-17, R3-10.**
+- [x] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum.
+- [x] **Step 11 — Key management**: `invariant keygen`, key file format.
 
 ### Phase 3: Eval
 - [ ] **Step 12 — Eval presets**: safety-check, completeness-check, regression-check.
