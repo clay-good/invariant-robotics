@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 1 complete (Steps 1-8). **Profile library** implemented: `profiles` module in `invariant-core` embeds 4 validated built-in profiles (humanoid 28-DOF, Franka Panda, quadruped 12-DOF, UR10). Public API: `load_builtin()`, `load_from_str()`, `load_from_file()`, `builtin_json()`, `BUILTIN_NAMES`. All profiles validated on load. 225 tests passing, clippy clean.
+Phase 2 in progress (Step 9 complete). **CLI** implemented: 5 working subcommands (`validate`, `keygen`, `inspect`, `audit`, `verify`) plus 4 stubs for later phases (`eval`, `diff`, `campaign`, `serve`). Full validation pipeline wired end-to-end: load profile + keys + command JSON, run authority + physics, output signed verdict. 229 tests passing, clippy clean.
 
 ## Completed Tasks
 
@@ -17,6 +17,9 @@ Phase 1 complete (Steps 1-8). **Profile library** implemented: `profiles` module
 - [x] **Step 6 — Signed audit logger**: `AuditLogger<W: Write>` append-only hash-chained Ed25519-signed JSONL logger. L1 completeness (command+verdict stored), L2 ordering (SHA-256 hash chain), L3 authenticity (Ed25519 entry signatures), L4 immutability (O_APPEND file mode). `new()`/`resume()`/`open_file()` constructors, `log()` method, `verify_log()` verifier. 14 new tests (169 total).
 - [x] **Step 7 — Watchdog**: `Watchdog` struct enforcing W1 invariant. `WatchdogConfig` (timeout + SafeStopProfile), `WatchdogState` (Active/SafeStopTriggered/ManuallyReset), `WatchdogStatus` (Ok/SafeStopRequired/AlreadyTriggered). One-way safe-stop transition (CE7), operator reset, trigger_count audit field, time_remaining query, `_at` injected-instant variants for deterministic tests. `build_safe_stop_command` produces signed `SignedActuationCommand` with sentinel hash `"safe-stop:watchdog"`. 13 new tests (182 total).
 - [x] **Step 8 — Profile library**: `profiles` module embedding 4 validated built-in profiles (humanoid_28dof, franka_panda, quadruped_12dof, ur10). `load_builtin()`, `load_from_str()`, `load_from_file()`, `builtin_json()` API. Per-robot structural checks (joint counts/names/groups, stability config, safe-stop positions within limits, workspace bounds). Cross-profile invariants (finite limits, valid velocity scales, positive watchdog timeouts). Round-trip serde, error paths. 43 new tests (225 total).
+
+### Phase 2: CLI
+- [x] **Step 9 — CLI**: Clap-based `invariant` binary with all 9 subcommands from Section 5. 5 fully implemented: `validate` (single/batch/stdin command validation with signed verdict output, guardian/shadow modes, exit 0=approved/1=rejected/2=error), `keygen` (Ed25519 keypair generation to JSON key file), `inspect` (human-readable profile summary), `audit` (JSONL log viewer with --last N), `verify` (hash chain + signature verification). 4 stubs for later phases: `eval` (Step 12), `diff` (Step 15), `campaign` (Step 19), `serve` (Step 10). Added base64, rand, ed25519-dalek, chrono, sha2 deps. 4 new tests (229 total).
 
 ---
 
