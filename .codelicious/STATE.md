@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 2 in progress (Step 10 complete). **Embedded Trust Plane** implemented: `invariant serve` runs an axum HTTP server with 4 endpoints (`POST /validate`, `POST /heartbeat`, `GET /health`, `GET /watchdog`). Full validation pipeline exposed over HTTP with watchdog integration, previous-joints tracking, and safe-stop command generation. 6 working subcommands + 3 stubs. 234 tests passing, clippy clean.
+Phase 2 complete (Step 11 done). **Key management** implemented: `invariant_core::keys` module with `KeyFile` model (JSON format with kid, algorithm, signing_key, verifying_key), `DecodedKeyFile` with full validation (empty kid, algorithm check, base64 decode, key length, Ed25519 point validity, keypair consistency), load/save/decode API. CLI commands refactored to use shared model (eliminated 3 duplicate structs + 4 duplicate decode functions). 249 tests passing, clippy clean.
 
 ## Completed Tasks
 
@@ -21,6 +21,7 @@ Phase 2 in progress (Step 10 complete). **Embedded Trust Plane** implemented: `i
 ### Phase 2: CLI
 - [x] **Step 9 — CLI**: Clap-based `invariant` binary with all 9 subcommands from Section 5. 5 fully implemented: `validate` (single/batch/stdin command validation with signed verdict output, guardian/shadow modes, exit 0=approved/1=rejected/2=error), `keygen` (Ed25519 keypair generation to JSON key file), `inspect` (human-readable profile summary), `audit` (JSONL log viewer with --last N), `verify` (hash chain + signature verification). 4 stubs for later phases: `eval` (Step 12), `diff` (Step 15), `campaign` (Step 19), `serve` (Step 10). Added base64, rand, ed25519-dalek, chrono, sha2 deps. 4 new tests (229 total).
 - [x] **Step 10 — Embedded Trust Plane**: `invariant serve` axum HTTP server with 4 endpoints: `POST /validate` (command validation returning SignedVerdict + optional SignedActuationCommand), `POST /heartbeat` (watchdog heartbeat), `GET /health` (server status with watchdog state, profile name, signer identity), `GET /watchdog` (check timeout, returns safe-stop command if triggered). Arc-shared state with Mutex-protected watchdog and previous_joints tracking. `--trust-plane` flag accepted. Dependencies added: axum 0.8, tokio net feature, tower (dev). 5 new tests (234 total).
+- [x] **Step 11 — Key management**: `invariant_core::keys` module with `KeyFile` model (JSON format: kid, algorithm, signing_key, verifying_key). `DecodedKeyFile` with comprehensive validation: non-empty kid, Ed25519 algorithm check, base64 decode + 32-byte length check, Ed25519 point validity, keypair consistency (signing_key matches verifying_key). `load()`/`save()`/`decode()`/`load_and_decode()` API. `from_signing_key()` constructor. `trusted_keys()` convenience for ValidatorConfig. Custom Debug impl redacts signing key bytes. Refactored keygen, validate, serve commands to use shared model — eliminated 3 duplicate KeyFile structs and 4 duplicate key-decode functions. 15 new tests (249 total).
 
 ---
 
@@ -356,12 +357,12 @@ Build: PASS. Tests: 64/64 PASS. Clippy: FAIL (1 lint error).
 - [x] **Step 5a — Fix P1 review findings**: All 5 P1 findings fixed (S5-P1-01 through S5-P1-05).
 - [x] **Step 6 — Signed audit logger**: Append-only, hash-chained, Ed25519-signed JSONL.
 - [x] **Step 7 — Watchdog**: Heartbeat monitor, safe-stop command generation.
-- [ ] **Step 8 — Profile library**: 4 validated profiles (humanoid 28-DOF, Franka, quadruped, UR10).
+- [x] **Step 8 — Profile library**: 4 validated profiles (humanoid 28-DOF, Franka, quadruped, UR10).
 
 ### Phase 2: CLI
-- [ ] **Step 9 — CLI**: clap-based, all subcommands. **Fix R2-16, R2-17, R3-10.**
-- [ ] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum.
-- [ ] **Step 11 — Key management**: `invariant keygen`, key file format.
+- [x] **Step 9 — CLI**: clap-based, all subcommands. **Fix R2-16, R2-17, R3-10.**
+- [x] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum.
+- [x] **Step 11 — Key management**: `invariant keygen`, key file format.
 
 ### Phase 3: Eval
 - [ ] **Step 12 — Eval presets**: safety-check, completeness-check, regression-check.
