@@ -700,7 +700,7 @@ Exit codes: 0 = approved/pass, 1 = rejected/fail, 2 = error.
 
 9. **CLI**: clap-based, all subcommands from Section 5.
 10. ~~**Embedded Trust Plane**: `invariant serve` mode using axum (from provenance-main pattern).~~ ✓
-11. **Key management**: `invariant keygen`, key file format.
+11. ~~**Key management**: `invariant keygen`, key file format.~~ ✓
 
 ### Phase 3: Eval (Steps 12-15)
 

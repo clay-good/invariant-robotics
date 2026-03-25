@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 2 in progress (Step 10 complete). Embedded Trust Plane server implemented via axum with 3 HTTP endpoints (POST /validate, POST /heartbeat, GET /health). Trust-plane mode auto-issues self-signed PCA chains. Watchdog heartbeat integration with configurable timeout. 211 tests passing, clippy clean (8 new serve tests).
+Phase 2 complete (Step 11 complete). Key management system hardened with KID validation, SHA-256 fingerprints, public key export, overwrite protection, and secure Unix permissions. 242 tests passing, clippy clean (31 new key management tests).
 
 ## Completed Tasks
 
@@ -21,6 +21,7 @@ Phase 2 in progress (Step 10 complete). Embedded Trust Plane server implemented 
 ### Phase 2: CLI
 - [x] **Step 9 — CLI**: Full clap CLI with 5 working subcommands. `validate` supports single/batch/stdin input, guardian/shadow/forge modes, writes audit log. `keygen` generates Ed25519 keypairs to JSON. `audit` displays JSONL entries with --last N. `verify` checks hash chain + signatures. `inspect` shows profile summary. Key file module (`key_file.rs`) with load/write/decode helpers. eval/diff/campaign/serve remain stubs for later steps. 16 new tests (203 total).
 - [x] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum. POST /validate (full validation pipeline with JSON request/response), POST /heartbeat (watchdog timer feed), GET /health (server status). Trust-plane mode (--trust-plane) auto-issues self-signed PCA chains. Watchdog configurable via --watchdog-timeout-ms (default 500ms, 0 disables). Shared state via Arc + tokio::sync::Mutex. Dependencies: axum 0.8, tower 0.5 (dev). 8 new tests (211 total).
+- [x] **Step 11 — Key management**: Production-quality key management system. `validate_kid()` rejects empty, >128 byte, or unsafe-character KIDs. SHA-256 `fingerprint()` for out-of-band key verification. `export_public_key()` creates public-key-only files. `--export-pub` flag on `keygen` writes shareable public key file. `--force` flag for overwrite protection. `write_key_file_secure()` sets 0600 permissions on Unix for secret-containing files. KID validation on all key file loads. `sha2` dependency added to CLI crate. 31 new tests (242 total).
 
 ---
 
