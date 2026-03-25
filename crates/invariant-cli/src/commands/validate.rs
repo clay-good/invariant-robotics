@@ -1,9 +1,14 @@
 use clap::{Args, ValueEnum};
-use std::io::{self, Read};
+use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::Utc;
-use invariant_core::keys::KeyFile;
+use ed25519_dalek::SigningKey;
+
+use invariant_core::authority::crypto::sign_pca;
+use invariant_core::models::authority::Pca;
 use invariant_core::models::command::Command;
 use invariant_core::validator::ValidatorConfig;
 
@@ -12,6 +17,7 @@ use invariant_core::validator::ValidatorConfig;
 pub enum ValidationMode {
     Guardian,
     Shadow,
+    Forge,
 }
 
 #[derive(Args)]
@@ -30,163 +36,195 @@ pub struct ValidateArgs {
     /// Path to the key file.
     #[arg(long, value_name = "KEY_FILE")]
     pub key: PathBuf,
-    /// Validation mode: guardian (full firewall) or shadow (log-only) (P2-11).
+    /// Validation mode: guardian (full firewall), shadow (log-only), or forge (self-signed authority).
     #[arg(long, value_enum, default_value = "guardian")]
     pub mode: ValidationMode,
+    /// Path to the audit log file.
+    #[arg(long, value_name = "AUDIT_LOG", default_value = "audit.jsonl")]
+    pub audit_log: PathBuf,
 }
 
 pub fn run(args: &ValidateArgs) -> i32 {
-    // Load and decode key file.
-    let decoded = match KeyFile::load_and_decode(&args.key) {
-        Ok(d) => d,
+    // Load profile.
+    let profile_json = match std::fs::read_to_string(&args.profile) {
+        Ok(s) => s,
         Err(e) => {
-            eprintln!("invariant validate: {e}");
+            eprintln!("error: failed to read profile {:?}: {e}", args.profile);
             return 2;
         }
     };
-
-    // Load profile.
-    let profile = match invariant_core::profiles::load_from_file(&args.profile) {
+    let profile = match invariant_core::profiles::load_from_json(&profile_json) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("invariant validate: failed to load profile: {e}");
+            eprintln!("error: invalid profile: {e}");
             return 2;
         }
     };
+
+    // Load key file.
+    let kf = match crate::key_file::load_key_file(&args.key) {
+        Ok(kf) => kf,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+    let (signing_key, verifying_key, kid) = match crate::key_file::load_signing_key(&kf) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+
+    // Build trusted keys: in all modes, trust the Invariant instance's own key.
+    let mut trusted_keys = HashMap::new();
+    trusted_keys.insert(kid.clone(), verifying_key);
 
     // Build validator config.
-    let config = match ValidatorConfig::new(
-        profile,
-        decoded.trusted_keys(),
-        decoded.signing_key,
-        decoded.kid,
-    ) {
+    let config = match ValidatorConfig::new(profile, trusted_keys, signing_key.clone(), kid.clone())
+    {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("invariant validate: {e}");
+            eprintln!("error: {e}");
             return 2;
         }
     };
 
-    // Load commands.
-    let commands = match load_commands(args) {
+    // Create audit logger (needs a second copy of the signing key since SigningKey doesn't Clone).
+    let audit_sk = SigningKey::from_bytes(&signing_key.to_bytes());
+    let mut logger =
+        match invariant_core::audit::AuditLogger::open_file(&args.audit_log, audit_sk, kid.clone()) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("error: failed to open audit log: {e}");
+                return 2;
+            }
+        };
+
+    // Read commands.
+    let commands = match read_commands(args) {
         Ok(cmds) => cmds,
         Err(e) => {
-            eprintln!("invariant validate: {e}");
+            eprintln!("error: {e}");
             return 2;
         }
     };
 
     if commands.is_empty() {
-        eprintln!("invariant validate: no commands to validate");
+        eprintln!("error: no commands to validate");
         return 2;
     }
 
     // Validate each command.
-    let is_shadow = matches!(args.mode, ValidationMode::Shadow);
-    let mut all_approved = true;
-    let mut previous_joints = None;
+    let mut any_rejected = false;
+    for mut cmd in commands {
+        // In forge mode, auto-generate a self-signed PCA chain.
+        if matches!(args.mode, ValidationMode::Forge) {
+            if let Err(e) = forge_authority(&mut cmd, &signing_key, &kid) {
+                eprintln!("error: forge mode PCA generation failed: {e}");
+                return 2;
+            }
+        }
 
-    for (i, cmd) in commands.iter().enumerate() {
         let now = Utc::now();
-        match config.validate(cmd, now, previous_joints.as_deref()) {
+        match config.validate(&cmd, now, None) {
             Ok(result) => {
-                let verdict = &result.signed_verdict;
-                if !verdict.verdict.approved {
-                    all_approved = false;
+                // Write audit log.
+                if let Err(e) = logger.log(&cmd, &result.signed_verdict) {
+                    eprintln!("error: failed to write audit log: {e}");
+                    return 2;
                 }
 
-                // Output the signed verdict as JSON.
-                match serde_json::to_string(&verdict) {
-                    Ok(json) => println!("{json}"),
-                    Err(e) => {
-                        eprintln!("invariant validate: failed to serialize verdict: {e}");
-                        return 2;
-                    }
-                }
-
-                // In guardian mode, also output the actuation command if approved.
-                if !is_shadow {
+                // Output verdict as JSON to stdout.
+                let output = if result.signed_verdict.verdict.approved {
                     if let Some(ref actuation) = result.actuation_command {
-                        match serde_json::to_string(actuation) {
-                            Ok(json) => {
-                                eprintln!(
-                                    "invariant validate: command {} approved, actuation signed",
-                                    cmd.sequence
-                                );
-                                // Actuation command goes to stderr for separation.
-                                // The verdict JSON on stdout is the primary output.
-                                let _ = json; // actuation is internal; verdict is the output
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "invariant validate: failed to serialize actuation: {e}"
-                                );
-                                return 2;
-                            }
-                        }
+                        serde_json::json!({
+                            "verdict": result.signed_verdict,
+                            "actuation_command": actuation,
+                        })
+                    } else {
+                        serde_json::json!({ "verdict": result.signed_verdict })
                     }
-                }
+                } else {
+                    any_rejected = true;
+                    serde_json::json!({ "verdict": result.signed_verdict })
+                };
 
-                // Track joint states for next command in batch.
-                if commands.len() > 1 {
-                    previous_joints = Some(cmd.joint_states.clone());
-                }
+                println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
             }
             Err(e) => {
-                eprintln!("invariant validate: command {i}: {e}");
+                eprintln!("error: validation failed: {e}");
                 return 2;
             }
         }
     }
 
-    if all_approved {
-        0
-    } else {
-        1
+    // Exit code depends on mode.
+    match args.mode {
+        ValidationMode::Shadow => 0, // shadow never blocks
+        _ => {
+            if any_rejected {
+                1
+            } else {
+                0
+            }
+        }
     }
 }
 
-fn load_commands(args: &ValidateArgs) -> Result<Vec<Command>, String> {
+/// Read commands from file, batch, or stdin.
+fn read_commands(args: &ValidateArgs) -> Result<Vec<Command>, String> {
     if let Some(ref path) = args.command {
-        // Single command file.
-        let data = std::fs::read_to_string(path)
-            .map_err(|e| format!("failed to read command file: {e}"))?;
+        let data =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         let cmd: Command =
-            serde_json::from_str(&data).map_err(|e| format!("failed to parse command: {e}"))?;
+            serde_json::from_str(&data).map_err(|e| format!("parse command: {e}"))?;
         Ok(vec![cmd])
     } else if let Some(ref path) = args.batch {
-        // Batch JSONL file.
         let data =
-            std::fs::read_to_string(path).map_err(|e| format!("failed to read batch file: {e}"))?;
-        parse_jsonl_commands(&data)
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let mut commands = Vec::new();
+        for (i, line) in data.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let cmd: Command = serde_json::from_str(trimmed)
+                .map_err(|e| format!("parse command at line {}: {e}", i + 1))?;
+            commands.push(cmd);
+        }
+        Ok(commands)
     } else {
         // Read from stdin.
-        let mut data = String::new();
-        io::stdin()
-            .lock()
-            .read_to_string(&mut data)
-            .map_err(|e| format!("failed to read stdin: {e}"))?;
-
-        // Try as single JSON first, then as JSONL.
-        if let Ok(cmd) = serde_json::from_str::<Command>(&data) {
-            Ok(vec![cmd])
-        } else {
-            parse_jsonl_commands(&data)
-        }
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| format!("read stdin: {e}"))?;
+        let cmd: Command = serde_json::from_str(&buf).map_err(|e| format!("parse stdin: {e}"))?;
+        Ok(vec![cmd])
     }
 }
 
-fn parse_jsonl_commands(data: &str) -> Result<Vec<Command>, String> {
-    let mut commands = Vec::new();
-    for (i, line) in data.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let cmd: Command = serde_json::from_str(trimmed)
-            .map_err(|e| format!("failed to parse command at line {}: {e}", i + 1))?;
-        commands.push(cmd);
-    }
-    Ok(commands)
+/// In forge mode, generate a self-signed PCA chain that grants the command's required_ops.
+fn forge_authority(cmd: &mut Command, signing_key: &SigningKey, kid: &str) -> Result<(), String> {
+    let ops = cmd.authority.required_ops.iter().cloned().collect();
+
+    let pca = Pca {
+        p_0: "forge".to_string(),
+        ops,
+        kid: kid.to_string(),
+        exp: None,
+        nbf: None,
+    };
+
+    let signed = sign_pca(&pca, signing_key).map_err(|e| e.to_string())?;
+
+    // Encode the chain as base64 JSON array of SignedPca.
+    let chain = vec![signed];
+    let chain_json = serde_json::to_vec(&chain).map_err(|e| e.to_string())?;
+    cmd.authority.pca_chain = STANDARD.encode(&chain_json);
+
+    Ok(())
 }
+

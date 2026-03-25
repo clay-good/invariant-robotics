@@ -120,7 +120,6 @@ pub fn verify_chain(
     // origin is guaranteed to be Some because hops is non-empty and we set it
     // on the first iteration.
     let origin = origin.unwrap();
-
     let final_ops = decoded_claims.last().unwrap().ops.clone();
 
     Ok(AuthorityChain::new(
