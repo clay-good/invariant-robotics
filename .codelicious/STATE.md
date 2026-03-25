@@ -1,7 +1,7 @@
 # Invariant — Build State
 
 ## Current Status
-Phase 2 in progress (Step 9 complete). CLI layer implemented in `crates/invariant-cli/` with 5 working subcommands (validate, keygen, audit, verify, inspect). Forge mode enables self-signed PCA for development/testing. Key file module with JSON format (kid, public_key, secret_key). 203 tests passing, clippy clean (16 new CLI tests).
+Phase 2 in progress (Step 10 complete). Embedded Trust Plane server implemented via axum with 3 HTTP endpoints (POST /validate, POST /heartbeat, GET /health). Trust-plane mode auto-issues self-signed PCA chains. Watchdog heartbeat integration with configurable timeout. 211 tests passing, clippy clean (8 new serve tests).
 
 ## Completed Tasks
 
@@ -20,6 +20,7 @@ Phase 2 in progress (Step 9 complete). CLI layer implemented in `crates/invarian
 
 ### Phase 2: CLI
 - [x] **Step 9 — CLI**: Full clap CLI with 5 working subcommands. `validate` supports single/batch/stdin input, guardian/shadow/forge modes, writes audit log. `keygen` generates Ed25519 keypairs to JSON. `audit` displays JSONL entries with --last N. `verify` checks hash chain + signatures. `inspect` shows profile summary. Key file module (`key_file.rs`) with load/write/decode helpers. eval/diff/campaign/serve remain stubs for later steps. 16 new tests (203 total).
+- [x] **Step 10 — Embedded Trust Plane**: `invariant serve` mode using axum. POST /validate (full validation pipeline with JSON request/response), POST /heartbeat (watchdog timer feed), GET /health (server status). Trust-plane mode (--trust-plane) auto-issues self-signed PCA chains. Watchdog configurable via --watchdog-timeout-ms (default 500ms, 0 disables). Shared state via Arc + tokio::sync::Mutex. Dependencies: axum 0.8, tower 0.5 (dev). 8 new tests (211 total).
 
 ---
 
