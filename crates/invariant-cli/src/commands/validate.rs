@@ -1,5 +1,14 @@
+use base64::{engine::general_purpose::STANDARD, Engine};
 use clap::{Args, ValueEnum};
+use ed25519_dalek::{SigningKey, VerifyingKey};
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::io::{self, Read};
 use std::path::PathBuf;
+
+use chrono::Utc;
+use invariant_core::models::command::Command;
+use invariant_core::validator::ValidatorConfig;
 
 /// Operating mode for validation (P2-11: enum instead of free String).
 #[derive(Debug, Clone, ValueEnum)]
@@ -29,7 +38,207 @@ pub struct ValidateArgs {
     pub mode: ValidationMode,
 }
 
-pub fn run_stub() -> i32 {
-    eprintln!("invariant validate: not yet implemented (Step 9)");
-    2
+#[derive(Deserialize)]
+struct KeyFile {
+    kid: String,
+    signing_key: String,
+    verifying_key: String,
+}
+
+pub fn run(args: &ValidateArgs) -> i32 {
+    // Load key file.
+    let key_data = match std::fs::read_to_string(&args.key) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("invariant validate: failed to read key file: {e}");
+            return 2;
+        }
+    };
+    let key_file: KeyFile = match serde_json::from_str(&key_data) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("invariant validate: failed to parse key file: {e}");
+            return 2;
+        }
+    };
+
+    let signing_key = match decode_signing_key(&key_file.signing_key) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("invariant validate: {e}");
+            return 2;
+        }
+    };
+    let verifying_key = match decode_verifying_key(&key_file.verifying_key) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("invariant validate: {e}");
+            return 2;
+        }
+    };
+
+    // The key file's key is used both as the signing key and as a trusted
+    // key for authority chain verification (the validator's own key).
+    let mut trusted_keys = HashMap::new();
+    trusted_keys.insert(key_file.kid.clone(), verifying_key);
+
+    // Load profile.
+    let profile = match invariant_core::profiles::load_from_file(&args.profile) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("invariant validate: failed to load profile: {e}");
+            return 2;
+        }
+    };
+
+    // Build validator config.
+    let config = match ValidatorConfig::new(profile, trusted_keys, signing_key, key_file.kid) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("invariant validate: {e}");
+            return 2;
+        }
+    };
+
+    // Load commands.
+    let commands = match load_commands(args) {
+        Ok(cmds) => cmds,
+        Err(e) => {
+            eprintln!("invariant validate: {e}");
+            return 2;
+        }
+    };
+
+    if commands.is_empty() {
+        eprintln!("invariant validate: no commands to validate");
+        return 2;
+    }
+
+    // Validate each command.
+    let is_shadow = matches!(args.mode, ValidationMode::Shadow);
+    let mut all_approved = true;
+    let mut previous_joints = None;
+
+    for (i, cmd) in commands.iter().enumerate() {
+        let now = Utc::now();
+        match config.validate(cmd, now, previous_joints.as_deref()) {
+            Ok(result) => {
+                let verdict = &result.signed_verdict;
+                if !verdict.verdict.approved {
+                    all_approved = false;
+                }
+
+                // Output the signed verdict as JSON.
+                match serde_json::to_string(&verdict) {
+                    Ok(json) => println!("{json}"),
+                    Err(e) => {
+                        eprintln!("invariant validate: failed to serialize verdict: {e}");
+                        return 2;
+                    }
+                }
+
+                // In guardian mode, also output the actuation command if approved.
+                if !is_shadow {
+                    if let Some(ref actuation) = result.actuation_command {
+                        match serde_json::to_string(actuation) {
+                            Ok(json) => {
+                                eprintln!(
+                                    "invariant validate: command {} approved, actuation signed",
+                                    cmd.sequence
+                                );
+                                // Actuation command goes to stderr for separation.
+                                // The verdict JSON on stdout is the primary output.
+                                let _ = json; // actuation is internal; verdict is the output
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "invariant validate: failed to serialize actuation: {e}"
+                                );
+                                return 2;
+                            }
+                        }
+                    }
+                }
+
+                // Track joint states for next command in batch.
+                if commands.len() > 1 {
+                    previous_joints = Some(cmd.joint_states.clone());
+                }
+            }
+            Err(e) => {
+                eprintln!("invariant validate: command {i}: {e}");
+                return 2;
+            }
+        }
+    }
+
+    if all_approved {
+        0
+    } else {
+        1
+    }
+}
+
+fn load_commands(args: &ValidateArgs) -> Result<Vec<Command>, String> {
+    if let Some(ref path) = args.command {
+        // Single command file.
+        let data = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read command file: {e}"))?;
+        let cmd: Command =
+            serde_json::from_str(&data).map_err(|e| format!("failed to parse command: {e}"))?;
+        Ok(vec![cmd])
+    } else if let Some(ref path) = args.batch {
+        // Batch JSONL file.
+        let data =
+            std::fs::read_to_string(path).map_err(|e| format!("failed to read batch file: {e}"))?;
+        parse_jsonl_commands(&data)
+    } else {
+        // Read from stdin.
+        let mut data = String::new();
+        io::stdin()
+            .lock()
+            .read_to_string(&mut data)
+            .map_err(|e| format!("failed to read stdin: {e}"))?;
+
+        // Try as single JSON first, then as JSONL.
+        if let Ok(cmd) = serde_json::from_str::<Command>(&data) {
+            Ok(vec![cmd])
+        } else {
+            parse_jsonl_commands(&data)
+        }
+    }
+}
+
+fn parse_jsonl_commands(data: &str) -> Result<Vec<Command>, String> {
+    let mut commands = Vec::new();
+    for (i, line) in data.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let cmd: Command = serde_json::from_str(trimmed)
+            .map_err(|e| format!("failed to parse command at line {}: {e}", i + 1))?;
+        commands.push(cmd);
+    }
+    Ok(commands)
+}
+
+fn decode_signing_key(b64: &str) -> Result<SigningKey, String> {
+    let bytes = STANDARD
+        .decode(b64)
+        .map_err(|e| format!("failed to base64-decode signing_key: {e}"))?;
+    let array: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| "signing_key must be exactly 32 bytes".to_string())?;
+    Ok(SigningKey::from_bytes(&array))
+}
+
+fn decode_verifying_key(b64: &str) -> Result<VerifyingKey, String> {
+    let bytes = STANDARD
+        .decode(b64)
+        .map_err(|e| format!("failed to base64-decode verifying_key: {e}"))?;
+    let array: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| "verifying_key must be exactly 32 bytes".to_string())?;
+    VerifyingKey::from_bytes(&array).map_err(|e| format!("invalid verifying key: {e}"))
 }

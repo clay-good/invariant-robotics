@@ -37,14 +37,14 @@ fn main() {
     let cli = Cli::parse();
     // P2-8: dispatch is stubbed per-command; Step 9 wires the full implementations.
     let exit_code = match cli.command {
-        Commands::Validate(_) => commands::validate::run_stub(),
-        Commands::Audit(_) => commands::audit::run_stub(),
-        Commands::Verify(_) => commands::verify::run_stub(),
-        Commands::Inspect(_) => commands::inspect::run_stub(),
+        Commands::Validate(ref args) => commands::validate::run(args),
+        Commands::Audit(ref args) => commands::audit::run(args),
+        Commands::Verify(ref args) => commands::verify::run(args),
+        Commands::Inspect(ref args) => commands::inspect::run(args),
         Commands::Eval(_) => commands::eval::run_stub(),
         Commands::Diff(_) => commands::diff::run_stub(),
         Commands::Campaign(_) => commands::campaign::run_stub(),
-        Commands::Keygen(_) => commands::keygen::run_stub(),
+        Commands::Keygen(ref args) => commands::keygen::run(args),
         Commands::Serve(_) => commands::serve::run_stub(),
     };
     std::process::exit(exit_code);
