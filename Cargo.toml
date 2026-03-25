@@ -29,6 +29,7 @@ clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1.0" }
+axum = "0.8"
 # Sim + eval
 serde_yaml = "0.9"
 regex = "1.11"
