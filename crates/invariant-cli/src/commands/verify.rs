@@ -26,8 +26,15 @@ pub fn run(args: &VerifyArgs) -> i32 {
         }
     };
 
-    // Verify the audit log.
-    match invariant_core::audit::verify_audit_log(&args.log, &vk) {
+    // Read and verify the audit log.
+    let content = match std::fs::read_to_string(&args.log) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("error: failed to read audit log: {e}");
+            return 2;
+        }
+    };
+    match invariant_core::audit::verify_log(&content, &vk) {
         Ok(count) => {
             println!("OK. {count} entries. Hash chain intact. All signatures valid.");
             0

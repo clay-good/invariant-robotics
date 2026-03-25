@@ -49,8 +49,7 @@ pub fn verify_chain(
         // Extract kid from the COSE protected header (covered by signature).
         let kid = extract_kid(&signed.raw, i)?;
 
-        // A3: Signature verification — MUST happen before payload decode so
-        // that origin is only extracted from verified data.
+        // A3: Signature verification — must complete before we trust the payload.
         let key = trusted_keys.get(&kid).ok_or_else(|| {
             AuthorityError::UnknownKeyId {
                 hop: i,
@@ -63,13 +62,13 @@ pub fn verify_chain(
         let claim = decode_pca_payload(&signed.raw, i)?;
 
         // A1: Provenance — p_0 must be immutable across all hops.
-        // Origin is extracted from hop 0 AFTER its signature is verified.
+        // Extract origin from the first verified hop.
         match &origin {
             None => {
                 origin = Some(claim.p_0.clone());
             }
             Some(expected) => {
-                if &claim.p_0 != expected {
+                if claim.p_0 != *expected {
                     return Err(AuthorityError::ProvenanceMismatch {
                         hop: i,
                         expected: expected.clone(),
@@ -118,13 +117,14 @@ pub fn verify_chain(
         decoded_claims.push(claim);
     }
 
-    let final_ops = decoded_claims.last().unwrap().ops.clone();
-
     // origin is guaranteed to be Some because hops is non-empty and we set it
     // on the first iteration.
+    let origin = origin.unwrap();
+    let final_ops = decoded_claims.last().unwrap().ops.clone();
+
     Ok(AuthorityChain::new(
         hops.to_vec(),
-        origin.unwrap(),
+        origin,
         final_ops,
     ))
 }

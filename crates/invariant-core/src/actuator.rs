@@ -108,6 +108,40 @@ mod tests {
     }
 
     #[test]
+    fn signer_kid_covered_by_signature() {
+        // S5-P1-01: signer_kid must be part of the signed payload.
+        // Swapping signer_kid on the SignedActuationCommand must fail verification.
+        let sk = generate_keypair(&mut OsRng);
+        let vk = sk.verifying_key();
+
+        let joints = vec![JointState {
+            name: "j1".into(),
+            position: 0.5,
+            velocity: 1.0,
+            effort: 10.0,
+        }];
+
+        let now = Utc::now();
+        let cmd =
+            build_signed_actuation_command("sha256:abc123", 42, &joints, now, &sk, "real-kid")
+                .unwrap();
+
+        // Reconstruct the payload with a different signer_kid.
+        let tampered_payload = ActuationPayload {
+            command_hash: &cmd.command_hash,
+            command_sequence: cmd.command_sequence,
+            joint_states: &cmd.joint_states,
+            timestamp: cmd.timestamp,
+            signer_kid: "swapped-kid",
+        };
+        let tampered_json = serde_json::to_vec(&tampered_payload).unwrap();
+        let sig_bytes = STANDARD.decode(&cmd.actuation_signature).unwrap();
+        let signature = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+        // Verification against the tampered payload must fail.
+        assert!(vk.verify(&tampered_json, &signature).is_err());
+    }
+
+    #[test]
     fn deterministic_signatures() {
         let sk = generate_keypair(&mut OsRng);
         let joints = vec![JointState {
@@ -126,36 +160,4 @@ mod tests {
         assert_eq!(cmd1.actuation_signature, cmd2.actuation_signature);
     }
 
-    #[test]
-    fn signer_kid_covered_by_signature() {
-        // P1-01: Changing signer_kid must invalidate the signature.
-        let sk = generate_keypair(&mut OsRng);
-        let vk = sk.verifying_key();
-
-        let joints = vec![JointState {
-            name: "j1".into(),
-            position: 0.5,
-            velocity: 1.0,
-            effort: 10.0,
-        }];
-        let now = Utc::now();
-        let cmd =
-            build_signed_actuation_command("sha256:abc", 1, &joints, now, &sk, "real-kid")
-                .unwrap();
-
-        // Reconstruct payload with the WRONG signer_kid.
-        let tampered_payload = ActuationPayload {
-            command_hash: &cmd.command_hash,
-            command_sequence: cmd.command_sequence,
-            joint_states: &cmd.joint_states,
-            timestamp: cmd.timestamp,
-            signer_kid: "attacker-kid",
-        };
-        let tampered_json = serde_json::to_vec(&tampered_payload).unwrap();
-        let sig_bytes = STANDARD.decode(&cmd.actuation_signature).unwrap();
-        let signature = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
-
-        // Verification with tampered kid must fail.
-        assert!(vk.verify(&tampered_json, &signature).is_err());
-    }
 }

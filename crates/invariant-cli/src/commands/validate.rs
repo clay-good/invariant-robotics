@@ -94,7 +94,7 @@ pub fn run(args: &ValidateArgs) -> i32 {
     // Create audit logger (needs a second copy of the signing key since SigningKey doesn't Clone).
     let audit_sk = SigningKey::from_bytes(&signing_key.to_bytes());
     let mut logger =
-        match invariant_core::audit::AuditLogger::new(&args.audit_log, audit_sk, kid.clone()) {
+        match invariant_core::audit::AuditLogger::open_file(&args.audit_log, audit_sk, kid.clone()) {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("error: failed to open audit log: {e}");
