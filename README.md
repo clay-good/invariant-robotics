@@ -42,18 +42,28 @@ Invariant is that something.
 
 ---
 
-## Five-Minute Demo
+## Quick Start
 
 ```sh
-# Build and run the complete proof demo
+# Build
 cargo build --release
+
+# Run the automated five-minute demo (builds, generates keys, validates, campaigns)
 ./examples/demo.sh
+
+# Or do it manually:
+./target/release/invariant keygen --kid my-robot --output keys.json
+./target/release/invariant inspect --profile profiles/ur10.json
+./target/release/invariant adversarial --profile profiles/ur10.json --key keys.json --suite all
+# Output: "540 attacks, 0 escapes. PASS"
+
+# Install globally (optional — puts `invariant` on your PATH)
+cargo install --path crates/invariant-cli
 ```
 
-Output:
+### Five-Minute Demo Output
+
 ```
-[Step 1] Generating Ed25519 key pair... OK
-[Step 2] Inspecting humanoid 28-DOF profile... 28 joints loaded
 [Step 3] Validating a SAFE command... APPROVED + signed
 [Step 4] Validating a DANGEROUS command... REJECTED (P1, P2, P3, P5 violations)
 [Step 5] Verifying audit log... 2 entries, hash chain intact
@@ -117,12 +127,12 @@ Output:
 ## CLI Reference
 
 ```sh
+# FIRST: generate a key pair (required for all commands that sign/verify)
+invariant keygen --kid "my-robot-001" --output keys.json
+
 # Core validation
 invariant validate --profile profiles/ur10.json --command cmd.json --key keys.json
 invariant validate --profile profiles/ur10.json --command cmd.json --key keys.json --mode forge
-
-# Key management
-invariant keygen --kid "invariant-001" --output keys.json
 
 # Intent pipeline (generate signed PCA from templates or direct ops)
 invariant intent list-templates
