@@ -29,6 +29,8 @@ formal/.lake/
 
 # Private / not for public repo
 business_plan/
+invariant_business_plan/
 
 # Test artifacts (generated at runtime)
 keys.json
+*.jsonl
