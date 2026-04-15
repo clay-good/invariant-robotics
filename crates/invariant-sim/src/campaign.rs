@@ -154,12 +154,16 @@ pub struct SuccessCriteria {
     #[serde(default)]
     pub max_violation_escape_rate: f64,
     /// Maximum fraction of legitimate commands that may be incorrectly rejected (default 0.02).
-    #[serde(default)]
+    #[serde(default = "default_max_false_rejection_rate")]
     pub max_false_rejection_rate: f64,
 }
 
 fn default_min_pass_rate() -> f64 {
     0.98
+}
+
+fn default_max_false_rejection_rate() -> f64 {
+    0.02
 }
 
 impl Default for SuccessCriteria {

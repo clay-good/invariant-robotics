@@ -9,7 +9,7 @@
 # Statistical claim: escape rate < 0.0003% with 95% confidence.
 #
 # NOTE: This campaign generates 106M total commands (64 envs × 16563 eps × 100 steps)
-# which exceeds the dry-run 10M command limit. Use cnc_tending_dry_run.yaml for local
+# which exceeds the dry-run 100M command limit. Use cnc_tending_dry_run.yaml for local
 # validation, or run this on cloud GPU with Isaac Lab.
 #
 # Local dry-run (scaled version):

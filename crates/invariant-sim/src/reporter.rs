@@ -466,27 +466,34 @@ fn compute_confidence(n_trials: u64, n_escapes: u64) -> ConfidenceStats {
     let (upper_95, upper_99) = if n_trials == 0 {
         (1.0_f64, 1.0_f64)
     } else if n_escapes == 0 {
-        // Clopper-Pearson exact bound for zero failures.
+        // Clopper-Pearson exact one-sided upper bound for zero failures:
+        //   upper = 1 - α^(1/n)
+        // where α is the significance level (0.05 for 95%, 0.01 for 99%).
         let n = n_trials as f64;
-        let ub95 = 1.0 - (0.025_f64).powf(1.0 / n);
-        let ub99 = 1.0 - (0.005_f64).powf(1.0 / n);
+        let ub95 = 1.0 - (0.05_f64).powf(1.0 / n);
+        let ub99 = 1.0 - (0.01_f64).powf(1.0 / n);
         (ub95.clamp(0.0, 1.0), ub99.clamp(0.0, 1.0))
     } else {
-        // STATISTICAL NOTE: the Wald (normal approximation) interval used here
-        // is known to be anti-conservative — it under-covers the true escape
-        // rate when the sample proportion is near 0 or 1, or when n is small.
-        // The exact Clopper-Pearson interval (based on the Beta distribution)
-        // would be more appropriate for safety-critical reporting.  A Beta
-        // distribution implementation is not currently available in this
-        // dependency tree, so the Wald approximation is used as a placeholder.
-        // Users should treat these bounds with caution when n_escapes is small
-        // relative to n_trials or when n_trials itself is below ~1000.
+        // Wilson score interval — more conservative than the Wald (normal)
+        // approximation for small p and large n, which is the regime we
+        // operate in during safety certification campaigns.
+        //
+        // Formula: (p + z²/(2n) + z·√(p(1-p)/n + z²/(4n²))) / (1 + z²/n)
         let n = n_trials as f64;
         let p = n_escapes as f64 / n;
-        let se = (p * (1.0 - p) / n).sqrt();
-        let ub95 = (p + 1.96 * se).clamp(0.0, 1.0);
-        let ub99 = (p + 2.576 * se).clamp(0.0, 1.0);
-        (ub95, ub99)
+
+        let z95 = 1.645_f64; // one-sided 95%
+        let z99 = 2.326_f64; // one-sided 99%
+
+        let wilson_upper = |z: f64| -> f64 {
+            let z2 = z * z;
+            let denom = 1.0 + z2 / n;
+            let center = p + z2 / (2.0 * n);
+            let margin = z * (p * (1.0 - p) / n + z2 / (4.0 * n * n)).sqrt();
+            ((center + margin) / denom).clamp(0.0, 1.0)
+        };
+
+        (wilson_upper(z95), wilson_upper(z99))
     };
 
     // MTBF: mean time between failures at 100 Hz.
@@ -1115,19 +1122,21 @@ mod tests {
     #[test]
     fn sil_rating_boundaries() {
         // Per-command thresholds: level uses upper_bound_99 directly.
-        // 5M trials, 0 escapes: upper_99 ≈ 1.06e-6 => level 1.
+        // One-sided Clopper-Pearson: upper_99 = 1 - 0.01^(1/n).
+        //
+        // 5M trials, 0 escapes: upper_99 ≈ 9.2e-7 => level 2.
         let conf = compute_confidence(5_000_000, 0);
-        assert_eq!(conf.sil_rating, 1);
+        assert_eq!(conf.sil_rating, 2);
 
-        // 10M trials: upper_99 ≈ 5.3e-7 => level 2.
+        // 10M trials: upper_99 ≈ 4.6e-7 => level 2.
         let conf = compute_confidence(10_000_000, 0);
         assert_eq!(conf.sil_rating, 2);
 
-        // 100M trials: upper_99 ≈ 5.3e-8 => level 3.
+        // 100M trials: upper_99 ≈ 4.6e-8 => level 3.
         let conf = compute_confidence(100_000_000, 0);
         assert_eq!(conf.sil_rating, 3);
 
-        // 1B trials: upper_99 ≈ 5.3e-9 => level 4.
+        // 1B trials: upper_99 ≈ 4.6e-9 => level 4.
         let conf = compute_confidence(1_000_000_000, 0);
         assert_eq!(conf.sil_rating, 4);
     }

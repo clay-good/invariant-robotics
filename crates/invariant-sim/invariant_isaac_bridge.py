@@ -84,7 +84,7 @@ class InvariantBridge:
         try:
             self._send(command)
             return self._recv()
-        except (ConnectionError, BrokenPipeError):
+        except (ConnectionError, BrokenPipeError, TimeoutError):
             self._reconnect()
             self._send(command)
             return self._recv()
@@ -96,13 +96,14 @@ class InvariantBridge:
             A dict with type: "heartbeat_ack".
 
         Raises:
-            TimeoutError: If the server does not respond within ``timeout_s``.
+            TimeoutError: If the server does not respond within ``timeout_s``
+                and reconnect also fails.
             ConnectionError: If the connection is lost and reconnect fails.
         """
         try:
             self._send({"heartbeat": True})
             return self._recv()
-        except (ConnectionError, BrokenPipeError):
+        except (ConnectionError, BrokenPipeError, TimeoutError):
             self._reconnect()
             self._send({"heartbeat": True})
             return self._recv()

@@ -163,6 +163,7 @@ SPINDLE_ZONE_DISABLED_STATES = frozenset({
     CycleState.VISE_APPROACH,
     CycleState.VISE_PLACE,
     CycleState.VISE_CLAMP,
+    CycleState.VISE_RETREAT,   # Robot is exiting enclosure after loading
     CycleState.VISE_UNCLAMP,
     CycleState.PICK_FINISHED,
 })
