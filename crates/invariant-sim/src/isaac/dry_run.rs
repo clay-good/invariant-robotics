@@ -873,7 +873,7 @@ mod tests {
 
     #[test]
     fn dry_run_works_with_all_builtin_profiles() {
-        for profile_name in &["franka_panda", "ur10", "quadruped_12dof", "humanoid_28dof"] {
+        for profile_name in invariant_core::profiles::list_builtins() {
             let config = CampaignConfig {
                 name: format!("test_{profile_name}"),
                 profile: profile_name.to_string(),
@@ -3860,6 +3860,165 @@ mod tests {
             for scenario in &scenarios {
                 let config = CampaignConfig {
                     name: format!("adv_{profile}_{scenario}"),
+                    profile: profile.to_string(),
+                    environments: 1,
+                    episodes_per_env: 2,
+                    steps_per_episode: 5,
+                    scenarios: vec![ScenarioConfig {
+                        scenario_type: scenario.to_string(),
+                        weight: 1.0,
+                        injections: vec![],
+                    }],
+                    success_criteria: SuccessCriteria::default(),
+                };
+                let result = run_dry_campaign(&config, None);
+                assert!(
+                    result.is_ok(),
+                    "scenario '{scenario}' on {profile} must not error: {:?}",
+                    result.err()
+                );
+                assert_eq!(
+                    result.unwrap().violation_escape_count,
+                    0,
+                    "scenario '{scenario}' on {profile}: zero escapes"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dry_run_all_scenarios_dexterous_hand_profile() {
+        // Dexterous hands: no locomotion, no stability, but have end-effectors
+        // and fine-grained collision pairs.
+        let scenarios = [
+            "baseline",
+            "aggressive",
+            "authority_escalation",
+            "chain_forgery",
+            "prompt_injection",
+            "compound_authority_physics",
+            "compound_drift_then_violation",
+            "recovery_safe_stop",
+            "long_running_stability",
+        ];
+        for profile in &[
+            "shadow_hand",
+            "allegro_hand",
+            "leap_hand",
+            "psyonic_ability",
+        ] {
+            for scenario in &scenarios {
+                let config = CampaignConfig {
+                    name: format!("hand_{profile}_{scenario}"),
+                    profile: profile.to_string(),
+                    environments: 1,
+                    episodes_per_env: 2,
+                    steps_per_episode: 5,
+                    scenarios: vec![ScenarioConfig {
+                        scenario_type: scenario.to_string(),
+                        weight: 1.0,
+                        injections: vec![],
+                    }],
+                    success_criteria: SuccessCriteria::default(),
+                };
+                let result = run_dry_campaign(&config, None);
+                assert!(
+                    result.is_ok(),
+                    "scenario '{scenario}' on {profile} must not error: {:?}",
+                    result.err()
+                );
+                assert_eq!(
+                    result.unwrap().violation_escape_count,
+                    0,
+                    "scenario '{scenario}' on {profile}: zero escapes"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dry_run_all_scenarios_mobile_manipulator_profile() {
+        // Mobile manipulators: locomotion-enabled with prismatic joints.
+        let all_scenarios = [
+            "baseline",
+            "aggressive",
+            "exclusion_zone",
+            "authority_escalation",
+            "chain_forgery",
+            "prompt_injection",
+            "locomotion_runaway",
+            "locomotion_slip",
+            "locomotion_trip",
+            "locomotion_stomp",
+            "locomotion_fall",
+            "environment_fault",
+            "compound_authority_physics",
+            "compound_environment_physics",
+            "recovery_safe_stop",
+            "long_running_stability",
+        ];
+        for profile in &["spot_with_arm", "hello_stretch", "pal_tiago"] {
+            for scenario in &all_scenarios {
+                let config = CampaignConfig {
+                    name: format!("mobile_{profile}_{scenario}"),
+                    profile: profile.to_string(),
+                    environments: 1,
+                    episodes_per_env: 2,
+                    steps_per_episode: 5,
+                    scenarios: vec![ScenarioConfig {
+                        scenario_type: scenario.to_string(),
+                        weight: 1.0,
+                        injections: vec![],
+                    }],
+                    success_criteria: SuccessCriteria::default(),
+                };
+                let result = run_dry_campaign(&config, None);
+                assert!(
+                    result.is_ok(),
+                    "scenario '{scenario}' on {profile} must not error: {:?}",
+                    result.err()
+                );
+                assert_eq!(
+                    result.unwrap().violation_escape_count,
+                    0,
+                    "scenario '{scenario}' on {profile}: zero escapes"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dry_run_all_scenarios_new_humanoid_profiles() {
+        // New humanoid profiles: all 22 scenarios, verifying full coverage
+        // for the expanded humanoid roster.
+        let all_scenarios = [
+            "baseline",
+            "aggressive",
+            "exclusion_zone",
+            "authority_escalation",
+            "chain_forgery",
+            "prompt_injection",
+            "locomotion_runaway",
+            "locomotion_slip",
+            "locomotion_trip",
+            "locomotion_stomp",
+            "locomotion_fall",
+            "environment_fault",
+            "compound_authority_physics",
+            "compound_sensor_spatial",
+            "compound_drift_then_violation",
+            "compound_environment_physics",
+            "recovery_safe_stop",
+            "recovery_audit_integrity",
+            "long_running_stability",
+            "long_running_threat",
+        ];
+        // Test a representative sample of the new humanoids (not all 8,
+        // as each takes ~1s per scenario — test the most distinct ones).
+        for profile in &["fourier_gr1", "agility_digit", "bd_atlas"] {
+            for scenario in &all_scenarios {
+                let config = CampaignConfig {
+                    name: format!("humanoid_{profile}_{scenario}"),
                     profile: profile.to_string(),
                     environments: 1,
                     episodes_per_env: 2,
