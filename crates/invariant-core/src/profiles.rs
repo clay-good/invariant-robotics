@@ -1,6 +1,7 @@
 //! Profile library — built-in robot profiles embedded at compile time.
 //!
-//! Provides 10 validated profiles covering humanoids, quadrupeds, and collaborative arms.
+//! Provides 23 validated profiles covering humanoids, quadrupeds, collaborative arms,
+//! dexterous hands, and adversarial test configurations.
 //! Custom profiles can be loaded from JSON strings or file bytes.
 
 use std::sync::OnceLock;
@@ -23,6 +24,16 @@ const KUKA_IIWA14_JSON: &str = include_str!("../profiles/kuka_iiwa14.json");
 const KINOVA_GEN3_JSON: &str = include_str!("../profiles/kinova_gen3.json");
 const ABB_GOFA_JSON: &str = include_str!("../profiles/abb_gofa.json");
 const SHADOW_HAND_JSON: &str = include_str!("../profiles/shadow_hand.json");
+const FOURIER_GR1_JSON: &str = include_str!("../profiles/fourier_gr1.json");
+const TESLA_OPTIMUS_JSON: &str = include_str!("../profiles/tesla_optimus.json");
+const FIGURE_02_JSON: &str = include_str!("../profiles/figure_02.json");
+const BD_ATLAS_JSON: &str = include_str!("../profiles/bd_atlas.json");
+const AGILITY_DIGIT_JSON: &str = include_str!("../profiles/agility_digit.json");
+const SANCTUARY_PHOENIX_JSON: &str = include_str!("../profiles/sanctuary_phoenix.json");
+const ONEX_NEO_JSON: &str = include_str!("../profiles/onex_neo.json");
+const APPTRONIK_APOLLO_JSON: &str = include_str!("../profiles/apptronik_apollo.json");
+const UNITREE_GO2_JSON: &str = include_str!("../profiles/unitree_go2.json");
+const ANYBOTICS_ANYMAL_JSON: &str = include_str!("../profiles/anybotics_anymal.json");
 const ADV_ZERO_MARGIN_JSON: &str = include_str!("../profiles/adversarial_zero_margin.json");
 const ADV_MAX_WORKSPACE_JSON: &str = include_str!("../profiles/adversarial_max_workspace.json");
 const ADV_SINGLE_JOINT_JSON: &str = include_str!("../profiles/adversarial_single_joint.json");
@@ -43,6 +54,16 @@ static CACHED_KUKA_IIWA14: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_KINOVA_GEN3: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ABB_GOFA: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_SHADOW_HAND: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_FOURIER_GR1: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_TESLA_OPTIMUS: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_FIGURE_02: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_BD_ATLAS: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_AGILITY_DIGIT: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_SANCTUARY_PHOENIX: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_ONEX_NEO: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_APPTRONIK_APOLLO: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_UNITREE_GO2: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_ANYBOTICS_ANYMAL: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ADV_ZERO_MARGIN: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ADV_MAX_WORKSPACE: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ADV_SINGLE_JOINT: OnceLock<RobotProfile> = OnceLock::new();
@@ -89,6 +110,16 @@ const BUILTIN_NAMES: &[&str] = &[
     "kinova_gen3",
     "abb_gofa",
     "shadow_hand",
+    "fourier_gr1",
+    "tesla_optimus",
+    "figure_02",
+    "bd_atlas",
+    "agility_digit",
+    "sanctuary_phoenix",
+    "onex_neo",
+    "apptronik_apollo",
+    "unitree_go2",
+    "anybotics_anymal",
     "adversarial_zero_margin",
     "adversarial_max_workspace",
     "adversarial_single_joint",
@@ -173,6 +204,36 @@ pub fn load_builtin(name: &str) -> Result<RobotProfile, ProfileError> {
             .clone(),
         "shadow_hand" => CACHED_SHADOW_HAND
             .get_or_init(|| parse_and_validate(SHADOW_HAND_JSON))
+            .clone(),
+        "fourier_gr1" => CACHED_FOURIER_GR1
+            .get_or_init(|| parse_and_validate(FOURIER_GR1_JSON))
+            .clone(),
+        "tesla_optimus" => CACHED_TESLA_OPTIMUS
+            .get_or_init(|| parse_and_validate(TESLA_OPTIMUS_JSON))
+            .clone(),
+        "figure_02" => CACHED_FIGURE_02
+            .get_or_init(|| parse_and_validate(FIGURE_02_JSON))
+            .clone(),
+        "bd_atlas" => CACHED_BD_ATLAS
+            .get_or_init(|| parse_and_validate(BD_ATLAS_JSON))
+            .clone(),
+        "agility_digit" => CACHED_AGILITY_DIGIT
+            .get_or_init(|| parse_and_validate(AGILITY_DIGIT_JSON))
+            .clone(),
+        "sanctuary_phoenix" => CACHED_SANCTUARY_PHOENIX
+            .get_or_init(|| parse_and_validate(SANCTUARY_PHOENIX_JSON))
+            .clone(),
+        "onex_neo" => CACHED_ONEX_NEO
+            .get_or_init(|| parse_and_validate(ONEX_NEO_JSON))
+            .clone(),
+        "apptronik_apollo" => CACHED_APPTRONIK_APOLLO
+            .get_or_init(|| parse_and_validate(APPTRONIK_APOLLO_JSON))
+            .clone(),
+        "unitree_go2" => CACHED_UNITREE_GO2
+            .get_or_init(|| parse_and_validate(UNITREE_GO2_JSON))
+            .clone(),
+        "anybotics_anymal" => CACHED_ANYBOTICS_ANYMAL
+            .get_or_init(|| parse_and_validate(ANYBOTICS_ANYMAL_JSON))
             .clone(),
         "adversarial_zero_margin" => CACHED_ADV_ZERO_MARGIN
             .get_or_init(|| parse_and_validate(ADV_ZERO_MARGIN_JSON))
@@ -356,12 +417,144 @@ mod tests {
         assert!(p.real_world_margins.is_some());
     }
 
+    #[test]
+    fn load_fourier_gr1() {
+        let p = load_builtin("fourier_gr1").expect("load fourier_gr1");
+        assert_eq!(p.name, "fourier_gr1");
+        assert_eq!(p.joints.len(), 39);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        assert!((loco.max_locomotion_velocity - 1.39).abs() < 0.01);
+        assert_eq!(p.end_effectors.len(), 2);
+        assert_eq!(
+            p.safe_stop_profile.strategy,
+            SafeStopStrategy::ControlledCrouch
+        );
+    }
+
+    #[test]
+    fn load_tesla_optimus() {
+        let p = load_builtin("tesla_optimus").expect("load tesla_optimus");
+        assert_eq!(p.name, "tesla_optimus");
+        assert_eq!(p.joints.len(), 28);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        assert!((loco.max_locomotion_velocity - 1.25).abs() < 0.01);
+        assert_eq!(p.end_effectors.len(), 2);
+    }
+
+    #[test]
+    fn load_figure_02() {
+        let p = load_builtin("figure_02").expect("load figure_02");
+        assert_eq!(p.name, "figure_02");
+        assert_eq!(p.joints.len(), 42);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        assert_eq!(p.end_effectors.len(), 2);
+        // Has per-finger joints
+        assert!(p.joints.iter().any(|j| j.name == "left_hand_index"));
+        assert!(p.joints.iter().any(|j| j.name == "right_hand_thumb_b"));
+    }
+
+    #[test]
+    fn load_bd_atlas() {
+        let p = load_builtin("bd_atlas").expect("load bd_atlas");
+        assert_eq!(p.name, "bd_atlas");
+        assert_eq!(p.joints.len(), 28);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        assert!((loco.max_locomotion_velocity - 2.5).abs() < 0.01);
+        // Atlas is the most dynamic — highest GRF
+        assert!(loco.max_ground_reaction_force > 1000.0);
+        assert_eq!(p.end_effectors.len(), 2);
+    }
+
+    #[test]
+    fn load_agility_digit() {
+        let p = load_builtin("agility_digit").expect("load agility_digit");
+        assert_eq!(p.name, "agility_digit");
+        assert_eq!(p.joints.len(), 16);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        // Digit is legs-only, no arms
+        assert!(p.end_effectors.is_empty());
+        // Has unique leg structure with shin and tarsus
+        assert!(p.joints.iter().any(|j| j.name == "left_tarsus"));
+    }
+
+    #[test]
+    fn load_sanctuary_phoenix() {
+        let p = load_builtin("sanctuary_phoenix").expect("load sanctuary_phoenix");
+        assert_eq!(p.name, "sanctuary_phoenix");
+        assert_eq!(p.joints.len(), 24);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        assert_eq!(p.end_effectors.len(), 2);
+    }
+
+    #[test]
+    fn load_onex_neo() {
+        let p = load_builtin("onex_neo").expect("load onex_neo");
+        assert_eq!(p.name, "onex_neo");
+        assert_eq!(p.joints.len(), 28);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        assert_eq!(p.end_effectors.len(), 2);
+        // NEO designed for home — higher safety margins
+        let margins = p.real_world_margins.as_ref().unwrap();
+        assert!(margins.velocity_margin >= 0.20);
+    }
+
+    #[test]
+    fn load_apptronik_apollo() {
+        let p = load_builtin("apptronik_apollo").expect("load apptronik_apollo");
+        assert_eq!(p.name, "apptronik_apollo");
+        assert_eq!(p.joints.len(), 30);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        assert_eq!(p.end_effectors.len(), 2);
+        // Apollo has high payload (25kg total, 12.5 per hand)
+        assert!((p.end_effectors[0].max_payload_kg - 12.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn load_unitree_go2() {
+        let p = load_builtin("unitree_go2").expect("load unitree_go2");
+        assert_eq!(p.name, "unitree_go2");
+        assert_eq!(p.joints.len(), 12);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        // Go2 is fast for its size
+        assert!((loco.max_locomotion_velocity - 3.5).abs() < 0.01);
+        assert_eq!(p.collision_pairs.len(), 4);
+        assert!(p.environment.is_some());
+    }
+
+    #[test]
+    fn load_anybotics_anymal() {
+        let p = load_builtin("anybotics_anymal").expect("load anybotics_anymal");
+        assert_eq!(p.name, "anybotics_anymal");
+        assert_eq!(p.joints.len(), 12);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        // ANYmal has wider stance than Go2
+        let stability = p.stability.as_ref().unwrap();
+        assert!(stability.com_height_estimate > 0.4);
+        let env = p.environment.as_ref().unwrap();
+        // Industrial robot — wider terrain tolerance
+        assert!(env.max_safe_pitch_rad > 0.3);
+    }
+
     // --- List builtins ---
 
     #[test]
-    fn list_builtins_returns_all_seventeen() {
+    fn list_builtins_returns_all() {
         let names = list_builtins();
-        assert_eq!(names.len(), 17);
+        assert_eq!(names.len(), 27);
         assert!(names.contains(&"humanoid_28dof"));
         assert!(names.contains(&"franka_panda"));
         assert!(names.contains(&"quadruped_12dof"));
@@ -370,6 +563,16 @@ mod tests {
         assert!(names.contains(&"unitree_g1"));
         assert!(names.contains(&"spot"));
         assert!(names.contains(&"kuka_iiwa14"));
+        assert!(names.contains(&"fourier_gr1"));
+        assert!(names.contains(&"tesla_optimus"));
+        assert!(names.contains(&"figure_02"));
+        assert!(names.contains(&"bd_atlas"));
+        assert!(names.contains(&"agility_digit"));
+        assert!(names.contains(&"sanctuary_phoenix"));
+        assert!(names.contains(&"onex_neo"));
+        assert!(names.contains(&"apptronik_apollo"));
+        assert!(names.contains(&"unitree_go2"));
+        assert!(names.contains(&"anybotics_anymal"));
     }
 
     // --- Error cases ---
