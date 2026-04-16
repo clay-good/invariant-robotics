@@ -605,7 +605,7 @@ These tests run across ALL platforms simultaneously.
 | Cross-platform stress | ~400,000 | All |
 | Adversarial/Red team | 1,500,000 | All |
 | Standard operation (coverage) | ~5,700,000 | Distributed across platforms |
-| **TOTAL** | **~10,000,000** | **17+ robot profiles** |
+| **TOTAL** | **~10,000,000** | **34 robot profiles** |
 
 ---
 
@@ -1055,7 +1055,7 @@ Phase 2: Validation Run (1x RunPod A40) -- 1,000 episodes
 
 Phase 3: Full Campaign (8x RunPod A40) -- 10,000,000 episodes
   - Run 10,000,000 episodes (1.25M per shard)
-  - All 17+ robot profiles
+  - All 34 robot profiles
   - All scenario types
   - All adversarial test categories
   - Monitor progress via shard status files
@@ -1163,7 +1163,7 @@ invariant-proof/
 
   campaign/
     config.yaml              # Exact campaign configuration
-    profiles/                # All 17+ robot profiles used
+    profiles/                # All 34 robot profiles used
     keys/                    # Public keys only (for verification)
     container_hash.txt       # SHA-256 of Docker image
     invariant_binary_hash.txt# SHA-256 of compiled binary
@@ -1233,7 +1233,7 @@ With 10,000,000 validated decisions and 0 bypass events:
 | 95% confidence upper bound | < 0.0000293% |
 | 99% confidence upper bound | < 0.0000449% |
 | Equivalent: "fewer than 1 in 3.3 million" | |
-| Robot profiles tested | 17+ |
+| Robot profiles tested | 34 |
 | Unique scenarios | 12+ |
 | Adversarial attack classes | 50+ |
 | Mean validation latency | < 400 us |

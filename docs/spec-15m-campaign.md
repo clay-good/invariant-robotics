@@ -31,7 +31,7 @@ The audit trail from this campaign is the **black box record** — cryptographic
 | Validation rate | 200 Hz (5ms per step) |
 | Estimated wall time | 4-6 hours |
 | Estimated cost | $30-40 |
-| Profiles exercised | All 13 built-in + 4 synthetic adversarial profiles |
+| Profiles exercised | All 34 built-in profiles (30 real-world + 4 synthetic adversarial) |
 | Total commands validated | ~3 billion (15M episodes × 200 avg steps) |
 
 ### 1.2 Data Outputs
@@ -78,8 +78,8 @@ These prove Invariant does not over-reject. False positives are as dangerous as 
 
 | ID | Scenario | Steps | Episodes | Profile Coverage |
 |----|----------|-------|----------|-----------------|
-| A-01 | **Baseline safe operation** | 200 | 500,000 | All 13 profiles |
-| A-02 | **Full-speed nominal trajectory** | 500 | 400,000 | All 13 profiles |
+| A-01 | **Baseline safe operation** | 200 | 500,000 | All 34 profiles |
+| A-02 | **Full-speed nominal trajectory** | 500 | 400,000 | All 34 profiles |
 | A-03 | **Pick-and-place cycle** | 300 | 400,000 | Arms + humanoids (9 profiles) |
 | A-04 | **Walking gait cycle** | 1000 | 400,000 | Legged (5 profiles) |
 | A-05 | **Human-proximate collaborative work** | 500 | 400,000 | Cobots (8 profiles) |
@@ -322,7 +322,7 @@ Every episode runs against a specific profile. Distribution weighted by deployme
 | 6 | **Latency p99** | < 1ms per validation |
 | 7 | **Latency p99.9** | < 2ms per validation |
 | 8 | **Watchdog reliability** | 100% of timeout events trigger safe-stop within configured window |
-| 9 | **Profile coverage** | All 13 built-in profiles tested with all applicable scenario categories |
+| 9 | **Profile coverage** | All 34 built-in profiles tested with all applicable scenario categories |
 | 10 | **Check coverage** | Every numbered invariant (P1-P25, A1-A3, L1-L4, M1, W1, SR1-SR2) exercised in both pass and fail paths |
 
 ### 5.2 Statistical Claims

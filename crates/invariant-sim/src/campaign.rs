@@ -1233,7 +1233,7 @@ scenarios:
             .iter()
             .map(|c| c.environments as u64 * c.episodes_per_env as u64)
             .sum();
-        // Allow 5% tolerance due to integer rounding across 17 profiles × 8 shards
+        // Allow 5% tolerance due to integer rounding across 34 profiles × 8 shards
         assert!(
             (14_000_000..=16_000_000).contains(&total),
             "total episodes {total} should be ~15M"
