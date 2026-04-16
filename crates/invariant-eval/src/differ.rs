@@ -28,7 +28,7 @@ pub struct TraceDiff {
     pub step: u64,
     /// The name of the diverging field. Always a static string literal —
     /// `diff_traces` only ever produces a fixed set of field names
-    /// (`"approved"`, `"trace_length"`).
+    /// (`"approved"`, `"check_result"`, `"trace_length"`).
     pub field: &'static str,
     /// The value of the diverging field in the baseline trace.
     pub baseline: String,
@@ -39,17 +39,14 @@ pub struct TraceDiff {
 /// Compare two traces and return divergences.
 ///
 /// The function compares the overlapping steps of `baseline` and `candidate`
-/// step-by-step.  For each shared step index it checks whether the top-level
-/// `approved` verdict differs.  After the shared prefix a length mismatch is
-/// reported as a single extra `TraceDiff` entry.
+/// step-by-step.  For each shared step index it checks:
 ///
-/// # Limitation — top-level comparison only
+/// 1. Whether the top-level `approved` verdict differs.
+/// 2. Whether any individual check result (`passed`) diverges between the two
+///    traces for checks that share the same name.
 ///
-/// `diff_traces` inspects only the top-level `verdict.approved` field.
-/// Per-check results within each verdict are **not** compared here.  Two traces
-/// that both have `approved = true` on every step will produce zero diffs even
-/// if their individual check results diverge.  Use `run_regression` from
-/// `presets` for a deeper, per-check comparison.
+/// After the shared prefix a length mismatch is reported as a single extra
+/// `TraceDiff` entry.
 ///
 /// # Examples
 ///
@@ -130,6 +127,26 @@ pub fn diff_traces(baseline: &Trace, candidate: &Trace) -> Vec<TraceDiff> {
                 baseline: b.verdict.verdict.approved.to_string(),
                 candidate: c.verdict.verdict.approved.to_string(),
             });
+        }
+
+        // Compare per-check results for checks that share the same name.
+        for base_check in &b.verdict.verdict.checks {
+            if let Some(cand_check) = c
+                .verdict
+                .verdict
+                .checks
+                .iter()
+                .find(|cc| cc.name == base_check.name)
+            {
+                if base_check.passed != cand_check.passed {
+                    diffs.push(TraceDiff {
+                        step: b.step,
+                        field: "check_result",
+                        baseline: format!("{}={}", base_check.name, base_check.passed),
+                        candidate: format!("{}={}", cand_check.name, cand_check.passed),
+                    });
+                }
+            }
         }
     }
 
@@ -260,11 +277,17 @@ mod tests {
         let baseline = make_trace(vec![make_step(0, true), make_step(1, true)]);
         let candidate = make_trace(vec![make_step(0, true), make_step(1, false)]);
         let diffs = diff_traces(&baseline, &candidate);
-        assert_eq!(diffs.len(), 1);
+        // Step 1 diverges on both approved and the per-check result.
+        assert!(diffs.len() >= 1, "expected at least one diff, got: {diffs:?}");
         assert_eq!(diffs[0].step, 1);
         assert_eq!(diffs[0].field, "approved");
         assert_eq!(diffs[0].baseline, "true");
         assert_eq!(diffs[0].candidate, "false");
+        // The authority check also diverges (passed tracks approved in test helper).
+        let check_diffs: Vec<_> = diffs.iter().filter(|d| d.field == "check_result").collect();
+        assert_eq!(check_diffs.len(), 1);
+        assert!(check_diffs[0].baseline.contains("authority=true"));
+        assert!(check_diffs[0].candidate.contains("authority=false"));
     }
 
     #[test]
@@ -298,28 +321,22 @@ mod tests {
         assert!(diffs.is_empty());
     }
 
-    /// Documents the top-level-only comparison limitation of `diff_traces`.
-    ///
-    /// Two traces with matching `approved = true` on every step produce zero
-    /// diffs even when their per-check results diverge.  This is intentional
-    /// for this function; use `run_regression` (in `presets`) for a deeper
-    /// per-check comparison.
+    /// Per-check divergences are detected even when the top-level `approved`
+    /// flag matches on both sides.
     #[test]
-    fn matching_approval_with_diverging_checks_produces_no_diffs() {
+    fn matching_approval_with_diverging_checks_produces_check_diff() {
         let baseline = make_trace(vec![make_step(0, true), make_step(1, true)]);
         let mut candidate = make_trace(vec![make_step(0, true), make_step(1, true)]);
         // Flip the single check result in candidate step 1 without changing
-        // the top-level `approved` flag — this is the divergence that
-        // diff_traces does NOT surface.
+        // the top-level `approved` flag.
         candidate.steps[1].verdict.verdict.checks[0].passed = false;
-        // Approved flag is intentionally left `true` to demonstrate the gap.
         assert!(candidate.steps[1].verdict.verdict.approved);
 
         let diffs = diff_traces(&baseline, &candidate);
-        assert!(
-            diffs.is_empty(),
-            "diff_traces only compares top-level approved; \
-             per-check divergence is not detected here, got: {diffs:?}"
-        );
+        assert_eq!(diffs.len(), 1, "expected one check_result diff, got: {diffs:?}");
+        assert_eq!(diffs[0].step, 1);
+        assert_eq!(diffs[0].field, "check_result");
+        assert!(diffs[0].baseline.contains("authority=true"));
+        assert!(diffs[0].candidate.contains("authority=false"));
     }
 }

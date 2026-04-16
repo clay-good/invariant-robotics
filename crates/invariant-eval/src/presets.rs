@@ -112,6 +112,16 @@ pub enum Severity {
     Info,
 }
 
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Severity::Error => write!(f, "error"),
+            Severity::Warning => write!(f, "warning"),
+            Severity::Info => write!(f, "info"),
+        }
+    }
+}
+
 /// Result of running an eval preset on a trace.
 ///
 /// # Examples
@@ -678,6 +688,26 @@ fn sanitize_trace_id(id: &str) -> String {
 fn regression_check(baseline: &Trace, candidate: &Trace) -> EvalReport {
     let mut findings = Vec::new();
     let mut all_passed = true;
+
+    // Fail-closed: two empty traces cannot demonstrate consistency — a vacuous
+    // pass would be misleading for a safety/regression check.
+    if baseline.steps.is_empty() && candidate.steps.is_empty() {
+        return EvalReport {
+            preset: PRESET_REGRESSION_CHECK.into(),
+            trace_id: format!(
+                "{}..{}",
+                sanitize_trace_id(&baseline.id),
+                sanitize_trace_id(&candidate.id)
+            ),
+            passed: false,
+            findings: vec![EvalFinding {
+                step: 0,
+                severity: Severity::Error,
+                message: "both traces are empty; cannot verify regression consistency".into(),
+            }],
+            summary: "both traces empty".into(),
+        };
+    }
 
     let min_steps = baseline.steps.len().min(candidate.steps.len());
 
@@ -1367,32 +1397,31 @@ mod tests {
         );
     }
 
-    /// Two empty traces produce a vacuous passed=true result with no findings
-    /// (the regression loop has nothing to iterate over).  This test documents
-    /// that behaviour so it is visible and deliberate rather than accidental.
-    ///
-    /// Note: if a stricter policy is desired (fail on empty traces), a guard
-    /// analogous to the one in `regression_check_single` should be added to
-    /// `regression_check`.
+    /// Two empty traces must fail — a vacuous pass would be misleading for a
+    /// safety/regression check.  This mirrors the fail-closed guard in
+    /// `regression_check_single`.
     #[test]
-    fn test_run_regression_both_empty_traces_passes() {
+    fn test_run_regression_both_empty_traces_fails() {
         let baseline = make_trace(vec![]);
         let candidate = make_trace(vec![]);
         let report = run_regression(&baseline, &candidate);
-        // Document the current behaviour: vacuous pass on two empty traces.
         assert!(
-            report.passed,
-            "run_regression on two empty traces currently returns passed=true (vacuous)"
-        );
-        assert!(
-            report.findings.is_empty(),
-            "expected no findings for two empty traces, got: {:?}",
-            report.findings
+            !report.passed,
+            "run_regression on two empty traces must fail (fail-closed)"
         );
         assert_eq!(
-            report.summary, "compared 0 steps, 0 regressions found",
-            "unexpected summary: {}",
-            report.summary
+            report.findings.len(),
+            1,
+            "expected exactly one finding for two empty traces, got: {:?}",
+            report.findings
+        );
+        assert_eq!(report.findings[0].severity, Severity::Error);
+        assert!(
+            report.findings[0]
+                .message
+                .contains("both traces are empty"),
+            "unexpected message: {}",
+            report.findings[0].message
         );
     }
 

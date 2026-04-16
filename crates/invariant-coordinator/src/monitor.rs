@@ -285,7 +285,7 @@ pub struct CrossRobotCheck {
 /// assert_eq!(verdict.stale_robots, 0);
 /// assert!(verdict.checks.iter().all(|c| c.passed));
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CoordinationVerdict {
     /// The robot being checked.
     pub robot_id: String,
@@ -307,6 +307,35 @@ pub struct CoordinationVerdict {
 
 /// Maximum number of end-effectors per robot (DoS guard).
 const MAX_EE_PER_ROBOT: usize = 64;
+
+/// Result of a successful [`CoordinationMonitor::update_state`] call.
+///
+/// # Examples
+///
+/// ```
+/// use invariant_robotics_coordinator::monitor::{
+///     CoordinationMonitor, CoordinationConfig, RobotState, EndEffectorState,
+/// };
+/// use chrono::Utc;
+///
+/// let mut monitor = CoordinationMonitor::new(CoordinationConfig::default());
+/// let state = RobotState {
+///     robot_id: "r1".into(),
+///     timestamp: Utc::now(),
+///     end_effector_positions: vec![
+///         EndEffectorState { name: "tcp".into(), position: [0.0, 0.0, 1.0] },
+///     ],
+///     active: true,
+/// };
+/// let result = monitor.update_state(state).unwrap();
+/// assert_eq!(result.truncated_ee, 0, "small EE list should not be truncated");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpdateResult {
+    /// Number of end-effector entries that were dropped due to the
+    /// per-robot DoS limit. Zero means nothing was truncated.
+    pub truncated_ee: usize,
+}
 
 /// The coordinator. Tracks robot states and performs cross-robot checks.
 ///
@@ -378,7 +407,11 @@ impl CoordinationMonitor {
     }
 
     /// Register or update a robot's state.
-    pub fn update_state(&mut self, state: RobotState) -> Result<(), CoordinatorError> {
+    ///
+    /// If the incoming state has more than [`MAX_EE_PER_ROBOT`] (64)
+    /// end-effectors, the list is truncated as a DoS guard and the number
+    /// of dropped entries is returned via [`UpdateResult::truncated_ee`].
+    pub fn update_state(&mut self, state: RobotState) -> Result<UpdateResult, CoordinatorError> {
         // Enforce max robots (only count new registrations).
         if !self.states.contains_key(&state.robot_id) && self.states.len() >= self.config.max_robots
         {
@@ -390,10 +423,12 @@ impl CoordinationMonitor {
 
         // Truncate oversized end-effector lists to prevent DoS.
         let mut state = state;
+        let original_len = state.end_effector_positions.len();
         state.end_effector_positions.truncate(MAX_EE_PER_ROBOT);
+        let truncated_ee = original_len.saturating_sub(MAX_EE_PER_ROBOT);
 
         self.states.insert(state.robot_id.clone(), state);
-        Ok(())
+        Ok(UpdateResult { truncated_ee })
     }
 
     /// Remove a robot from tracking (e.g., when it powers down).
@@ -876,7 +911,7 @@ mod tests {
         assert_eq!(verdict.robots_evaluated, 1);
     }
 
-    // ── Step 104: Coordinator security hardening tests ─────────────────
+    // ── Coordinator security hardening tests ─────────────────
 
     #[test]
     fn config_validate_rejects_zero_separation() {
@@ -941,6 +976,35 @@ mod tests {
         let mut config = CoordinationConfig::default();
         config.max_robots = 0;
         assert!(config.validate().is_err(), "max_robots=0 must be rejected");
+    }
+
+    #[test]
+    fn update_state_reports_ee_truncation() {
+        let config = CoordinationConfig::default();
+        let mut monitor = CoordinationMonitor::new(config);
+        let now = Utc::now();
+
+        // Create a robot with more than MAX_EE_PER_ROBOT (64) end-effectors.
+        let many_ees: Vec<(&str, [f64; 3])> = (0..70)
+            .map(|_| ("ee", [0.0, 0.0, 1.0]))
+            .collect();
+        let state = robot_state("r1", &many_ees, now);
+        let result = monitor.update_state(state).unwrap();
+        assert_eq!(result.truncated_ee, 6, "expected 70 - 64 = 6 truncated EEs");
+
+        // Verify the stored state was actually truncated.
+        assert_eq!(monitor.get_state("r1").unwrap().end_effector_positions.len(), 64);
+    }
+
+    #[test]
+    fn update_state_no_truncation_reports_zero() {
+        let config = CoordinationConfig::default();
+        let mut monitor = CoordinationMonitor::new(config);
+        let now = Utc::now();
+
+        let state = robot_state("r1", &[("ee", [0.0, 0.0, 1.0])], now);
+        let result = monitor.update_state(state).unwrap();
+        assert_eq!(result.truncated_ee, 0);
     }
 
     #[test]

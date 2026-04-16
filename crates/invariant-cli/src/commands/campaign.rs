@@ -22,7 +22,14 @@ pub fn run(args: &CampaignArgs) -> i32 {
     };
 
     if !args.dry_run {
-        eprintln!("Live Isaac Lab campaigns require --dry-run for now");
+        eprintln!("error: live Isaac Lab campaigns use the Python runner, not this command.");
+        eprintln!();
+        eprintln!("  For Isaac Lab (real physics):");
+        eprintln!("    1. invariant serve --profile <PROFILE> --key <KEY> --bridge --trust-plane");
+        eprintln!("    2. python isaac/campaign_runner.py --episodes N --steps M --profile <PROFILE>");
+        eprintln!();
+        eprintln!("  For dry-run (synthetic commands, no GPU):");
+        eprintln!("    invariant campaign --config <YAML> --key <KEY> --dry-run");
         return 2;
     }
 
