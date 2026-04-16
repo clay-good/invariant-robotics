@@ -146,9 +146,9 @@ invariant --help
 | [`invariant-coordinator`](crates/invariant-coordinator/) | Multi-robot coordination: separation monitoring, workspace partitioning |
 | [`formal/`](formal/) | Lean 4 formal specification with proof sketches (separate build) |
 
-### Built-in Robot Profiles (23 total)
+### Built-in Robot Profiles (34 total)
 
-**Humanoids**
+**Humanoids (11)**
 
 | Profile | Joints | Platform |
 |---------|--------|----------|
@@ -164,16 +164,17 @@ invariant --help
 | `onex_neo` | 28 | 1X Technologies NEO |
 | `apptronik_apollo` | 30 | Apptronik Apollo |
 
-**Quadrupeds**
+**Quadrupeds (5)**
 
 | Profile | Joints | Platform |
 |---------|--------|----------|
 | `quadruped_12dof` | 12 | Generic quadruped |
 | `spot` | 12 | Boston Dynamics Spot |
 | `unitree_go2` | 12 | Unitree Go2 |
+| `unitree_a1` | 12 | Unitree A1 |
 | `anybotics_anymal` | 12 | ANYbotics ANYmal |
 
-**Arms and Hands**
+**Arms (7)**
 
 | Profile | Joints | Platform |
 |---------|--------|----------|
@@ -184,7 +185,23 @@ invariant --help
 | `kuka_iiwa14` | 7 | KUKA LBR iiwa 14 |
 | `kinova_gen3` | 7 | Kinova Gen3 |
 | `abb_gofa` | 6 | ABB GoFa CRB 15000 |
+
+**Dexterous Hands (4)**
+
+| Profile | Joints | Platform |
+|---------|--------|----------|
 | `shadow_hand` | 24 | Shadow Dexterous Hand |
+| `allegro_hand` | 16 | Wonik Allegro Hand |
+| `leap_hand` | 16 | CMU LEAP Hand |
+| `psyonic_ability` | 6 | PSYONIC Ability Hand |
+
+**Mobile Manipulators (3)**
+
+| Profile | Joints | Platform |
+|---------|--------|----------|
+| `spot_with_arm` | 19 | Spot + 7-DOF arm |
+| `hello_stretch` | 4 | Hello Robot Stretch |
+| `pal_tiago` | 14 | PAL Robotics TIAGo |
 
 ---
 

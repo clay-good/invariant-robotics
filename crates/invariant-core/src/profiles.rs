@@ -1,7 +1,7 @@
 //! Profile library — built-in robot profiles embedded at compile time.
 //!
-//! Provides 23 validated profiles covering humanoids, quadrupeds, collaborative arms,
-//! dexterous hands, and adversarial test configurations.
+//! Provides 34 validated profiles covering humanoids, quadrupeds, collaborative arms,
+//! dexterous hands, mobile manipulators, and adversarial test configurations.
 //! Custom profiles can be loaded from JSON strings or file bytes.
 
 use std::sync::OnceLock;
@@ -34,6 +34,13 @@ const ONEX_NEO_JSON: &str = include_str!("../profiles/onex_neo.json");
 const APPTRONIK_APOLLO_JSON: &str = include_str!("../profiles/apptronik_apollo.json");
 const UNITREE_GO2_JSON: &str = include_str!("../profiles/unitree_go2.json");
 const ANYBOTICS_ANYMAL_JSON: &str = include_str!("../profiles/anybotics_anymal.json");
+const ALLEGRO_HAND_JSON: &str = include_str!("../profiles/allegro_hand.json");
+const LEAP_HAND_JSON: &str = include_str!("../profiles/leap_hand.json");
+const PSYONIC_ABILITY_JSON: &str = include_str!("../profiles/psyonic_ability.json");
+const UNITREE_A1_JSON: &str = include_str!("../profiles/unitree_a1.json");
+const SPOT_WITH_ARM_JSON: &str = include_str!("../profiles/spot_with_arm.json");
+const HELLO_STRETCH_JSON: &str = include_str!("../profiles/hello_stretch.json");
+const PAL_TIAGO_JSON: &str = include_str!("../profiles/pal_tiago.json");
 const ADV_ZERO_MARGIN_JSON: &str = include_str!("../profiles/adversarial_zero_margin.json");
 const ADV_MAX_WORKSPACE_JSON: &str = include_str!("../profiles/adversarial_max_workspace.json");
 const ADV_SINGLE_JOINT_JSON: &str = include_str!("../profiles/adversarial_single_joint.json");
@@ -64,6 +71,13 @@ static CACHED_ONEX_NEO: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_APPTRONIK_APOLLO: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_UNITREE_GO2: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ANYBOTICS_ANYMAL: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_ALLEGRO_HAND: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_LEAP_HAND: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_PSYONIC_ABILITY: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_UNITREE_A1: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_SPOT_WITH_ARM: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_HELLO_STRETCH: OnceLock<RobotProfile> = OnceLock::new();
+static CACHED_PAL_TIAGO: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ADV_ZERO_MARGIN: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ADV_MAX_WORKSPACE: OnceLock<RobotProfile> = OnceLock::new();
 static CACHED_ADV_SINGLE_JOINT: OnceLock<RobotProfile> = OnceLock::new();
@@ -120,6 +134,13 @@ const BUILTIN_NAMES: &[&str] = &[
     "apptronik_apollo",
     "unitree_go2",
     "anybotics_anymal",
+    "allegro_hand",
+    "leap_hand",
+    "psyonic_ability",
+    "unitree_a1",
+    "spot_with_arm",
+    "hello_stretch",
+    "pal_tiago",
     "adversarial_zero_margin",
     "adversarial_max_workspace",
     "adversarial_single_joint",
@@ -234,6 +255,27 @@ pub fn load_builtin(name: &str) -> Result<RobotProfile, ProfileError> {
             .clone(),
         "anybotics_anymal" => CACHED_ANYBOTICS_ANYMAL
             .get_or_init(|| parse_and_validate(ANYBOTICS_ANYMAL_JSON))
+            .clone(),
+        "allegro_hand" => CACHED_ALLEGRO_HAND
+            .get_or_init(|| parse_and_validate(ALLEGRO_HAND_JSON))
+            .clone(),
+        "leap_hand" => CACHED_LEAP_HAND
+            .get_or_init(|| parse_and_validate(LEAP_HAND_JSON))
+            .clone(),
+        "psyonic_ability" => CACHED_PSYONIC_ABILITY
+            .get_or_init(|| parse_and_validate(PSYONIC_ABILITY_JSON))
+            .clone(),
+        "unitree_a1" => CACHED_UNITREE_A1
+            .get_or_init(|| parse_and_validate(UNITREE_A1_JSON))
+            .clone(),
+        "spot_with_arm" => CACHED_SPOT_WITH_ARM
+            .get_or_init(|| parse_and_validate(SPOT_WITH_ARM_JSON))
+            .clone(),
+        "hello_stretch" => CACHED_HELLO_STRETCH
+            .get_or_init(|| parse_and_validate(HELLO_STRETCH_JSON))
+            .clone(),
+        "pal_tiago" => CACHED_PAL_TIAGO
+            .get_or_init(|| parse_and_validate(PAL_TIAGO_JSON))
             .clone(),
         "adversarial_zero_margin" => CACHED_ADV_ZERO_MARGIN
             .get_or_init(|| parse_and_validate(ADV_ZERO_MARGIN_JSON))
@@ -549,12 +591,118 @@ mod tests {
         assert!(env.max_safe_pitch_rad > 0.3);
     }
 
+    #[test]
+    fn load_allegro_hand() {
+        let p = load_builtin("allegro_hand").expect("load allegro_hand");
+        assert_eq!(p.name, "allegro_hand");
+        assert_eq!(p.joints.len(), 16);
+        assert!(p.stability.is_none());
+        assert!(p.locomotion.is_none());
+        assert!(p.end_effectors.len() >= 2);
+        assert_eq!(
+            p.safe_stop_profile.strategy,
+            SafeStopStrategy::ImmediateStop
+        );
+    }
+
+    #[test]
+    fn load_leap_hand() {
+        let p = load_builtin("leap_hand").expect("load leap_hand");
+        assert_eq!(p.name, "leap_hand");
+        assert_eq!(p.joints.len(), 16);
+        assert!(p.stability.is_none());
+        assert!(p.locomotion.is_none());
+        // LEAP has lighter actuators than Allegro
+        let allegro = load_builtin("allegro_hand").unwrap();
+        assert!(p.joints[0].max_torque < allegro.joints[0].max_torque);
+    }
+
+    #[test]
+    fn load_psyonic_ability() {
+        let p = load_builtin("psyonic_ability").expect("load psyonic_ability");
+        assert_eq!(p.name, "psyonic_ability");
+        assert_eq!(p.joints.len(), 6);
+        assert!(p.stability.is_none());
+        assert!(p.locomotion.is_none());
+        assert!(!p.end_effectors.is_empty());
+    }
+
+    #[test]
+    fn load_unitree_a1() {
+        let p = load_builtin("unitree_a1").expect("load unitree_a1");
+        assert_eq!(p.name, "unitree_a1");
+        assert_eq!(p.joints.len(), 12);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        assert!((loco.max_locomotion_velocity - 3.3).abs() < 0.01);
+        // A1 is lighter than Go2 — lower GRF
+        let go2 = load_builtin("unitree_go2").unwrap();
+        assert!(
+            loco.max_ground_reaction_force
+                <= go2.locomotion.as_ref().unwrap().max_ground_reaction_force
+        );
+    }
+
+    #[test]
+    fn load_spot_with_arm() {
+        let p = load_builtin("spot_with_arm").expect("load spot_with_arm");
+        assert_eq!(p.name, "spot_with_arm");
+        assert_eq!(p.joints.len(), 19);
+        assert!(p.stability.is_some());
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        // Slower than base Spot due to arm
+        let spot = load_builtin("spot").unwrap();
+        assert!(
+            loco.max_locomotion_velocity
+                < spot.locomotion.as_ref().unwrap().max_locomotion_velocity
+        );
+        // Has arm end effector
+        assert!(!p.end_effectors.is_empty());
+        assert!((p.end_effectors[0].max_payload_kg - 11.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn load_hello_stretch() {
+        let p = load_builtin("hello_stretch").expect("load hello_stretch");
+        assert_eq!(p.name, "hello_stretch");
+        assert_eq!(p.joints.len(), 4);
+        assert!(p.stability.is_none()); // wheeled base
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        assert!((loco.max_locomotion_velocity - 0.3).abs() < 0.01);
+        // Has prismatic joints
+        assert!(p
+            .joints
+            .iter()
+            .any(|j| j.joint_type == JointType::Prismatic));
+        assert!(!p.end_effectors.is_empty());
+    }
+
+    #[test]
+    fn load_pal_tiago() {
+        let p = load_builtin("pal_tiago").expect("load pal_tiago");
+        assert_eq!(p.name, "pal_tiago");
+        assert_eq!(p.joints.len(), 14);
+        assert!(p.stability.is_none()); // wheeled base
+        assert!(p.locomotion.is_some());
+        let loco = p.locomotion.as_ref().unwrap();
+        assert!((loco.max_locomotion_velocity - 1.0).abs() < 0.01);
+        // Has prismatic joints (torso_lift, grippers)
+        assert!(p
+            .joints
+            .iter()
+            .any(|j| j.joint_type == JointType::Prismatic));
+        assert!(!p.end_effectors.is_empty());
+    }
+
     // --- List builtins ---
 
     #[test]
     fn list_builtins_returns_all() {
         let names = list_builtins();
-        assert_eq!(names.len(), 27);
+        assert_eq!(names.len(), 34);
         assert!(names.contains(&"humanoid_28dof"));
         assert!(names.contains(&"franka_panda"));
         assert!(names.contains(&"quadruped_12dof"));
@@ -573,6 +721,13 @@ mod tests {
         assert!(names.contains(&"apptronik_apollo"));
         assert!(names.contains(&"unitree_go2"));
         assert!(names.contains(&"anybotics_anymal"));
+        assert!(names.contains(&"allegro_hand"));
+        assert!(names.contains(&"leap_hand"));
+        assert!(names.contains(&"psyonic_ability"));
+        assert!(names.contains(&"unitree_a1"));
+        assert!(names.contains(&"spot_with_arm"));
+        assert!(names.contains(&"hello_stretch"));
+        assert!(names.contains(&"pal_tiago"));
     }
 
     // --- Error cases ---
