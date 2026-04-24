@@ -66,6 +66,24 @@
     ["right_hand", "torso"],
     ["left_hand", "right_hand"]
   ],
+  "end_effectors": [
+    {
+      "name": "left_hand",
+      "max_force_n": 100.0,
+      "max_grasp_force_n": 30.0,
+      "min_grasp_force_n": 2.0,
+      "max_force_rate_n_per_s": 500.0,
+      "max_payload_kg": 5.0
+    },
+    {
+      "name": "right_hand",
+      "max_force_n": 100.0,
+      "max_grasp_force_n": 30.0,
+      "min_grasp_force_n": 2.0,
+      "max_force_rate_n_per_s": 500.0,
+      "max_payload_kg": 5.0
+    }
+  ],
   "stability": {
     "support_polygon": [[-0.13, -0.09], [0.13, -0.09], [0.13, 0.09], [-0.13, 0.09]],
     "com_height_estimate": 0.85,

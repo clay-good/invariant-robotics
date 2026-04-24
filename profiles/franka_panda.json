@@ -43,6 +43,16 @@
     ["panda_link7", "panda_link0"],
     ["panda_link7", "panda_link1"]
   ],
+  "end_effectors": [
+    {
+      "name": "flange",
+      "max_force_n": 100.0,
+      "max_grasp_force_n": 40.0,
+      "min_grasp_force_n": 2.0,
+      "max_force_rate_n_per_s": 500.0,
+      "max_payload_kg": 3.0
+    }
+  ],
   "stability": null,
   "max_delta_time": 0.005,
   "global_velocity_scale": 1.0,
@@ -59,5 +69,17 @@
       "panda_joint6": 1.571,
       "panda_joint7": 0.785
     }
+  },
+  "environment": {
+    "max_safe_pitch_rad": 0.087,
+    "max_safe_roll_rad": 0.087,
+    "warning_pitch_rad": 0.05,
+    "warning_roll_rad": 0.05,
+    "max_operating_temperature_c": 70.0,
+    "warning_temperature_c": 55.0,
+    "critical_battery_pct": 5.0,
+    "low_battery_pct": 15.0,
+    "max_latency_ms": 100.0,
+    "warning_latency_ms": 50.0
   }
 }
