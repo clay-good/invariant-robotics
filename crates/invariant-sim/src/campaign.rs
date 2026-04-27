@@ -619,6 +619,237 @@ pub mod data_outputs {
 }
 
 // ---------------------------------------------------------------------------
+// 15M Campaign Scenario Categories (Section 2.1)
+// ---------------------------------------------------------------------------
+
+/// Scenario categories for the 15M campaign (Section 2.1 Overview).
+///
+/// The 15M campaign is divided into 14 categories (A–N), totaling 104
+/// distinct scenarios and 15,000,000 episodes. Each category targets a
+/// specific safety domain — from normal operation through adversarial
+/// red-teaming — ensuring complete coverage of the Invariant firewall's
+/// validation surface.
+pub mod scenario_categories {
+    use serde::{Deserialize, Serialize};
+
+    /// Total number of scenario categories in the 15M campaign.
+    pub const CATEGORY_COUNT: usize = 14;
+
+    /// Total distinct scenarios across all categories.
+    pub const TOTAL_SCENARIOS: u32 = 104;
+
+    /// Total episodes across all categories (must equal 15M).
+    pub const TOTAL_EPISODES: u64 = 15_000_000;
+
+    /// A scenario category in the 15M campaign.
+    ///
+    /// Each variant maps to one row in the Section 2.1 overview table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::scenario_categories::ScenarioCategory;
+    ///
+    /// let cat = ScenarioCategory::NormalOperation;
+    /// assert_eq!(cat.letter(), 'A');
+    /// assert_eq!(cat.scenarios(), 6);
+    /// assert_eq!(cat.episodes(), 3_000_000);
+    /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum ScenarioCategory {
+        /// A: Prove valid commands are APPROVED correctly.
+        NormalOperation,
+        /// B: Prove P1-P4 catch every joint violation.
+        JointSafety,
+        /// C: Prove P5-P7 catch every workspace/zone/collision violation.
+        SpatialSafety,
+        /// D: Prove P9, P15-P20 catch every balance/gait failure.
+        StabilityLocomotion,
+        /// E: Prove P11-P14 catch every force/grasp/payload violation.
+        ManipulationSafety,
+        /// F: Prove P21-P25 + SR1-SR2 catch every environmental failure.
+        EnvironmentalHazards,
+        /// G: Prove A1-A3 catch every authority attack.
+        AuthorityCrypto,
+        /// H: Prove replay, sequence, timing attacks are caught.
+        TemporalSequence,
+        /// I: Prove LLM/AI reasoning cannot bypass the firewall.
+        CognitiveEscape,
+        /// J: Prove chained attacks across categories fail.
+        MultiStepCompound,
+        /// K: Prove safe-stop, recovery, and mode transitions are safe.
+        RecoveryResilience,
+        /// L: Prove 24h+ operation with no drift or degradation.
+        LongRunningStability,
+        /// M: Prove all profiles under maximum load.
+        CrossPlatformStress,
+        /// N: Prove fuzz/mutation/generation attacks find no bypass.
+        AdversarialRedTeam,
+    }
+
+    impl ScenarioCategory {
+        /// Returns all 14 categories in spec order (A–N).
+        pub fn all() -> &'static [ScenarioCategory; CATEGORY_COUNT] {
+            use ScenarioCategory::*;
+            &[
+                NormalOperation,
+                JointSafety,
+                SpatialSafety,
+                StabilityLocomotion,
+                ManipulationSafety,
+                EnvironmentalHazards,
+                AuthorityCrypto,
+                TemporalSequence,
+                CognitiveEscape,
+                MultiStepCompound,
+                RecoveryResilience,
+                LongRunningStability,
+                CrossPlatformStress,
+                AdversarialRedTeam,
+            ]
+        }
+
+        /// The single-letter identifier (A–N) for this category.
+        pub fn letter(&self) -> char {
+            use ScenarioCategory::*;
+            match self {
+                NormalOperation => 'A',
+                JointSafety => 'B',
+                SpatialSafety => 'C',
+                StabilityLocomotion => 'D',
+                ManipulationSafety => 'E',
+                EnvironmentalHazards => 'F',
+                AuthorityCrypto => 'G',
+                TemporalSequence => 'H',
+                CognitiveEscape => 'I',
+                MultiStepCompound => 'J',
+                RecoveryResilience => 'K',
+                LongRunningStability => 'L',
+                CrossPlatformStress => 'M',
+                AdversarialRedTeam => 'N',
+            }
+        }
+
+        /// Human-readable category name.
+        pub fn name(&self) -> &'static str {
+            use ScenarioCategory::*;
+            match self {
+                NormalOperation => "Normal Operation",
+                JointSafety => "Joint Safety",
+                SpatialSafety => "Spatial Safety",
+                StabilityLocomotion => "Stability & Locomotion",
+                ManipulationSafety => "Manipulation Safety",
+                EnvironmentalHazards => "Environmental Hazards",
+                AuthorityCrypto => "Authority & Crypto",
+                TemporalSequence => "Temporal & Sequence",
+                CognitiveEscape => "Cognitive Escape",
+                MultiStepCompound => "Multi-Step Compound",
+                RecoveryResilience => "Recovery & Resilience",
+                LongRunningStability => "Long-Running Stability",
+                CrossPlatformStress => "Cross-Platform Stress",
+                AdversarialRedTeam => "Adversarial Red Team",
+            }
+        }
+
+        /// Number of distinct scenarios in this category.
+        pub fn scenarios(&self) -> u32 {
+            use ScenarioCategory::*;
+            match self {
+                NormalOperation => 6,
+                JointSafety => 8,
+                SpatialSafety => 6,
+                StabilityLocomotion => 10,
+                ManipulationSafety => 6,
+                EnvironmentalHazards => 8,
+                AuthorityCrypto => 10,
+                TemporalSequence => 6,
+                CognitiveEscape => 10,
+                MultiStepCompound => 8,
+                RecoveryResilience => 6,
+                LongRunningStability => 4,
+                CrossPlatformStress => 6,
+                AdversarialRedTeam => 10,
+            }
+        }
+
+        /// Number of episodes allocated to this category.
+        pub fn episodes(&self) -> u64 {
+            use ScenarioCategory::*;
+            match self {
+                NormalOperation => 3_000_000,
+                JointSafety => 1_500_000,
+                SpatialSafety => 1_000_000,
+                StabilityLocomotion => 1_500_000,
+                ManipulationSafety => 750_000,
+                EnvironmentalHazards => 750_000,
+                AuthorityCrypto => 1_500_000,
+                TemporalSequence => 750_000,
+                CognitiveEscape => 1_500_000,
+                MultiStepCompound => 1_000_000,
+                RecoveryResilience => 500_000,
+                LongRunningStability => 250_000,
+                CrossPlatformStress => 500_000,
+                AdversarialRedTeam => 500_000,
+            }
+        }
+
+        /// Purpose statement for this category.
+        pub fn purpose(&self) -> &'static str {
+            use ScenarioCategory::*;
+            match self {
+                NormalOperation => "Prove valid commands are APPROVED correctly",
+                JointSafety => "Prove P1-P4 catch every joint violation",
+                SpatialSafety => {
+                    "Prove P5-P7 catch every workspace/zone/collision violation"
+                }
+                StabilityLocomotion => {
+                    "Prove P9, P15-P20 catch every balance/gait failure"
+                }
+                ManipulationSafety => {
+                    "Prove P11-P14 catch every force/grasp/payload violation"
+                }
+                EnvironmentalHazards => {
+                    "Prove P21-P25 + SR1-SR2 catch every environmental failure"
+                }
+                AuthorityCrypto => "Prove A1-A3 catch every authority attack",
+                TemporalSequence => {
+                    "Prove replay, sequence, timing attacks are caught"
+                }
+                CognitiveEscape => {
+                    "Prove LLM/AI reasoning cannot bypass the firewall"
+                }
+                MultiStepCompound => {
+                    "Prove chained attacks across categories fail"
+                }
+                RecoveryResilience => {
+                    "Prove safe-stop, recovery, and mode transitions are safe"
+                }
+                LongRunningStability => {
+                    "Prove 24h+ operation with no drift or degradation"
+                }
+                CrossPlatformStress => {
+                    "Prove all profiles under maximum load"
+                }
+                AdversarialRedTeam => {
+                    "Prove fuzz/mutation/generation attacks find no bypass"
+                }
+            }
+        }
+
+        /// Fraction of total campaign episodes allocated to this category.
+        pub fn weight(&self) -> f64 {
+            self.episodes() as f64 / TOTAL_EPISODES as f64
+        }
+    }
+
+    impl std::fmt::Display for ScenarioCategory {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}: {}", self.letter(), self.name())
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 15M Campaign Config Generator
 // ---------------------------------------------------------------------------
 
@@ -1579,6 +1810,152 @@ scenarios:
                 sc.scenario_type, steps, MIN_EPISODE_STEPS, MAX_EPISODE_STEPS
             );
         }
+    }
+
+    // ── 15M campaign config generator tests ───────────────────────────
+
+    // ── Scenario categories (Section 2.1) ────────────────────────────
+
+    #[test]
+    fn scenario_categories_count() {
+        use super::scenario_categories::*;
+        assert_eq!(ScenarioCategory::all().len(), CATEGORY_COUNT);
+        assert_eq!(CATEGORY_COUNT, 14);
+    }
+
+    #[test]
+    fn scenario_categories_total_scenarios() {
+        use super::scenario_categories::*;
+        let sum: u32 = ScenarioCategory::all().iter().map(|c| c.scenarios()).sum();
+        assert_eq!(sum, TOTAL_SCENARIOS);
+        assert_eq!(TOTAL_SCENARIOS, 104);
+    }
+
+    #[test]
+    fn scenario_categories_total_episodes() {
+        use super::scenario_categories::*;
+        let sum: u64 = ScenarioCategory::all().iter().map(|c| c.episodes()).sum();
+        assert_eq!(sum, TOTAL_EPISODES);
+        assert_eq!(TOTAL_EPISODES, 15_000_000);
+    }
+
+    #[test]
+    fn scenario_categories_letters_a_through_n() {
+        use super::scenario_categories::*;
+        let letters: Vec<char> = ScenarioCategory::all().iter().map(|c| c.letter()).collect();
+        assert_eq!(
+            letters,
+            vec!['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']
+        );
+    }
+
+    #[test]
+    fn scenario_categories_unique_letters() {
+        use super::scenario_categories::*;
+        let mut letters: Vec<char> = ScenarioCategory::all().iter().map(|c| c.letter()).collect();
+        letters.sort();
+        letters.dedup();
+        assert_eq!(letters.len(), CATEGORY_COUNT);
+    }
+
+    #[test]
+    fn scenario_categories_all_have_nonzero_episodes() {
+        use super::scenario_categories::*;
+        for cat in ScenarioCategory::all() {
+            assert!(
+                cat.episodes() > 0,
+                "category {} must have > 0 episodes",
+                cat.letter()
+            );
+        }
+    }
+
+    #[test]
+    fn scenario_categories_all_have_nonzero_scenarios() {
+        use super::scenario_categories::*;
+        for cat in ScenarioCategory::all() {
+            assert!(
+                cat.scenarios() > 0,
+                "category {} must have > 0 scenarios",
+                cat.letter()
+            );
+        }
+    }
+
+    #[test]
+    fn scenario_categories_weights_sum_to_one() {
+        use super::scenario_categories::*;
+        let sum: f64 = ScenarioCategory::all().iter().map(|c| c.weight()).sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-10,
+            "category weights must sum to 1.0, got {sum}"
+        );
+    }
+
+    #[test]
+    fn scenario_categories_normal_operation_largest() {
+        use super::scenario_categories::*;
+        let normal = ScenarioCategory::NormalOperation;
+        for cat in ScenarioCategory::all() {
+            assert!(
+                normal.episodes() >= cat.episodes(),
+                "Normal Operation (A) should have the most episodes, but {} has more",
+                cat.letter()
+            );
+        }
+    }
+
+    #[test]
+    fn scenario_categories_display_format() {
+        use super::scenario_categories::ScenarioCategory;
+        let display = format!("{}", ScenarioCategory::NormalOperation);
+        assert_eq!(display, "A: Normal Operation");
+        let display = format!("{}", ScenarioCategory::AdversarialRedTeam);
+        assert_eq!(display, "N: Adversarial Red Team");
+    }
+
+    #[test]
+    fn scenario_categories_purpose_nonempty() {
+        use super::scenario_categories::*;
+        for cat in ScenarioCategory::all() {
+            assert!(
+                !cat.purpose().is_empty(),
+                "category {} must have a purpose",
+                cat.letter()
+            );
+        }
+    }
+
+    #[test]
+    fn scenario_categories_name_nonempty() {
+        use super::scenario_categories::*;
+        for cat in ScenarioCategory::all() {
+            assert!(
+                !cat.name().is_empty(),
+                "category {} must have a name",
+                cat.letter()
+            );
+        }
+    }
+
+    #[test]
+    fn scenario_categories_serialization_round_trip() {
+        use super::scenario_categories::ScenarioCategory;
+        let cat = ScenarioCategory::CognitiveEscape;
+        let json = serde_json::to_string(&cat).expect("must serialize");
+        let back: ScenarioCategory = serde_json::from_str(&json).expect("must deserialize");
+        assert_eq!(back, cat);
+    }
+
+    #[test]
+    fn scenario_categories_episodes_consistent_with_execution_target() {
+        use super::scenario_categories;
+        use super::execution_target;
+        assert_eq!(
+            scenario_categories::TOTAL_EPISODES,
+            execution_target::TOTAL_EPISODES,
+            "scenario categories total must match execution target total"
+        );
     }
 
     // ── 15M campaign config generator tests ───────────────────────────
