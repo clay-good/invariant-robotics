@@ -448,6 +448,97 @@ pub mod data_outputs {
     /// After compression, the chain overhead is ~20 bytes/step.
     pub const CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED: u64 = 20;
 
+    /// A single step's command + verdict pair.
+    ///
+    /// This is the atomic unit of the campaign evidence trail: one command
+    /// submitted to the validator and the signed verdict it produced. The
+    /// full episode output consists of a sequence of these records plus
+    /// aggregate statistics.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::data_outputs::StepRecord;
+    ///
+    /// let record = StepRecord {
+    ///     step_index: 0,
+    ///     command_hash: "sha256:cmd0".to_string(),
+    ///     command_sequence: 1,
+    ///     approved: true,
+    ///     checks_evaluated: 6,
+    ///     checks_failed: 0,
+    ///     verdict_hash: "sha256:v0".to_string(),
+    ///     previous_verdict_hash: None,
+    /// };
+    ///
+    /// assert_eq!(record.step_index, 0);
+    /// assert!(record.approved);
+    /// assert!(record.previous_verdict_hash.is_none());
+    /// ```
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct StepRecord {
+        /// Zero-based step index within the episode.
+        pub step_index: u64,
+        /// SHA-256 hash of the command submitted at this step.
+        pub command_hash: String,
+        /// Monotonic sequence number of the command.
+        pub command_sequence: u64,
+        /// Whether the command was approved (`true`) or rejected (`false`).
+        pub approved: bool,
+        /// Number of safety checks evaluated at this step.
+        pub checks_evaluated: u32,
+        /// Number of safety checks that failed at this step.
+        pub checks_failed: u32,
+        /// SHA-256 hash of the verdict at this step.
+        pub verdict_hash: String,
+        /// Hash of the previous step's verdict (forming the hash chain).
+        ///
+        /// `None` for the first step in an episode.
+        pub previous_verdict_hash: Option<String>,
+    }
+
+    impl StepRecord {
+        /// Returns `true` if this step links to a previous verdict (not the first step).
+        pub fn is_chained(&self) -> bool {
+            self.previous_verdict_hash.is_some()
+        }
+    }
+
+    /// Estimate the compressed output size in bytes for a single episode.
+    ///
+    /// Uses the per-step size constants (`ESTIMATED_BYTES_PER_STEP_COMPRESSED`
+    /// and `CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED`) to compute a compressed
+    /// byte estimate for an episode with the given number of steps.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::data_outputs::estimate_episode_bytes;
+    ///
+    /// let bytes = estimate_episode_bytes(200);
+    /// // 200 steps × (60 + 20) bytes/step = 16,000 bytes
+    /// assert_eq!(bytes, 16_000);
+    /// ```
+    pub fn estimate_episode_bytes(steps: u64) -> u64 {
+        steps * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED)
+    }
+
+    /// Estimate the total compressed output size in bytes for the full campaign.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::data_outputs::estimate_campaign_bytes;
+    ///
+    /// let bytes = estimate_campaign_bytes(15_000_000, 200);
+    /// let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    /// // Should be in the 150-200 GB range
+    /// assert!(gb > 100.0 && gb < 300.0);
+    /// ```
+    pub fn estimate_campaign_bytes(total_episodes: u64, avg_steps: u64) -> u64 {
+        total_episodes * avg_steps * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED)
+    }
+
     /// The complete output of a single simulation episode.
     ///
     /// This is the per-episode record that constitutes the campaign's
@@ -2360,6 +2451,95 @@ scenarios:
             total_gb >= ESTIMATED_OUTPUT_GB_LOW && total_gb <= ESTIMATED_OUTPUT_GB_HIGH * 2,
             "per-step estimate ({bytes_per_step} B/step) yields {total_gb} GB, expected ~{ESTIMATED_OUTPUT_GB_LOW}-{ESTIMATED_OUTPUT_GB_HIGH} GB"
         );
+    }
+
+    // ── StepRecord tests ───────────────────────────────────────────
+
+    #[test]
+    fn step_record_first_step_not_chained() {
+        use super::data_outputs::StepRecord;
+        let record = StepRecord {
+            step_index: 0,
+            command_hash: "sha256:cmd0".into(),
+            command_sequence: 1,
+            approved: true,
+            checks_evaluated: 6,
+            checks_failed: 0,
+            verdict_hash: "sha256:v0".into(),
+            previous_verdict_hash: None,
+        };
+        assert!(!record.is_chained());
+    }
+
+    #[test]
+    fn step_record_subsequent_step_is_chained() {
+        use super::data_outputs::StepRecord;
+        let record = StepRecord {
+            step_index: 1,
+            command_hash: "sha256:cmd1".into(),
+            command_sequence: 2,
+            approved: false,
+            checks_evaluated: 6,
+            checks_failed: 2,
+            verdict_hash: "sha256:v1".into(),
+            previous_verdict_hash: Some("sha256:v0".into()),
+        };
+        assert!(record.is_chained());
+    }
+
+    #[test]
+    fn step_record_serialization_round_trip() {
+        use super::data_outputs::StepRecord;
+        let record = StepRecord {
+            step_index: 42,
+            command_hash: "sha256:deadbeef".into(),
+            command_sequence: 43,
+            approved: true,
+            checks_evaluated: 8,
+            checks_failed: 0,
+            verdict_hash: "sha256:verdict42".into(),
+            previous_verdict_hash: Some("sha256:verdict41".into()),
+        };
+        let json = serde_json::to_string(&record).expect("must serialize");
+        let back: StepRecord = serde_json::from_str(&json).expect("must deserialize");
+        assert_eq!(back.step_index, 42);
+        assert_eq!(back.command_sequence, 43);
+        assert!(back.approved);
+        assert!(back.is_chained());
+    }
+
+    // ── estimate functions tests ──────────────────────────────────────
+
+    #[test]
+    fn estimate_episode_bytes_matches_constants() {
+        use super::data_outputs::*;
+        let expected = 200 * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED);
+        assert_eq!(estimate_episode_bytes(200), expected);
+    }
+
+    #[test]
+    fn estimate_episode_bytes_zero_steps() {
+        use super::data_outputs::estimate_episode_bytes;
+        assert_eq!(estimate_episode_bytes(0), 0);
+    }
+
+    #[test]
+    fn estimate_campaign_bytes_in_expected_range() {
+        use super::data_outputs::estimate_campaign_bytes;
+        let bytes = estimate_campaign_bytes(15_000_000, 200);
+        let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        assert!(
+            gb >= 100.0 && gb <= 300.0,
+            "15M campaign estimate should be ~150-200 GB, got {gb:.1} GB"
+        );
+    }
+
+    #[test]
+    fn estimate_campaign_bytes_consistent_with_per_episode() {
+        use super::data_outputs::*;
+        let per_ep = estimate_episode_bytes(200);
+        let total = estimate_campaign_bytes(1000, 200);
+        assert_eq!(total, per_ep * 1000);
     }
 
     // ── EpisodeOutput tests ─────────────────────────────────────────
