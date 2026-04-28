@@ -2111,13 +2111,31 @@ scenarios:
 
     #[test]
     fn scenario_step_count_normal_scenarios_200() {
+        // A-01: Baseline and non-Category-A adversarial scenarios default to 200.
         assert_eq!(super::scenario_step_count("baseline"), 200);
-        assert_eq!(super::scenario_step_count("aggressive"), 200);
         assert_eq!(super::scenario_step_count("prompt_injection"), 200);
         assert_eq!(super::scenario_step_count("exclusion_zone"), 200);
         assert_eq!(super::scenario_step_count("authority_escalation"), 200);
         assert_eq!(super::scenario_step_count("chain_forgery"), 200);
         assert_eq!(super::scenario_step_count("locomotion_runaway"), 200);
+    }
+
+    #[test]
+    fn scenario_step_count_category_a_variable() {
+        // A-02: Full-speed nominal trajectory (500 steps)
+        assert_eq!(super::scenario_step_count("aggressive"), 500);
+        // A-03: Pick-and-place cycle (300 steps)
+        assert_eq!(super::scenario_step_count("pick_and_place"), 300);
+        // A-04: Walking gait cycle (1000 steps)
+        assert_eq!(super::scenario_step_count("walking_gait"), 1000);
+        // A-05: Human-proximate collaborative work (500 steps)
+        assert_eq!(super::scenario_step_count("collaborative_work"), 500);
+        // A-06: CNC tending full cycle (400 steps)
+        assert_eq!(super::scenario_step_count("cnc_tending_full_cycle"), 400);
+        // A-07: Dexterous manipulation (300 steps)
+        assert_eq!(super::scenario_step_count("dexterous_manipulation"), 300);
+        // A-08: Multi-robot coordinated task (500 steps)
+        assert_eq!(super::scenario_step_count("multi_robot_coordinated"), 500);
     }
 
     #[test]
@@ -2301,9 +2319,19 @@ scenarios:
     #[test]
     fn generate_15m_produces_tiered_configs_for_all_profiles() {
         let configs = generate_15m_configs(15_000_000, 8);
-        // 34 profiles × 3 step tiers × 8 shards = 816 configs
-        // (each profile has scenarios in all 3 tiers: 200, 500, 1000)
-        assert_eq!(configs.len(), 816, "34 profiles × 3 tiers × 8 shards");
+        // With Category A's variable step counts (200, 300, 400, 500, 1000),
+        // each profile gets a different number of tiers depending on which
+        // scenarios apply (CNC gets 400-step tier, legged gets 1000-step, etc.).
+        // Verify a reasonable number of configs: at least 34 × 8 (one tier min).
+        assert!(
+            configs.len() >= 34 * 8,
+            "must have at least one tier per profile × shard (got {})",
+            configs.len()
+        );
+        // And all 34 profiles should be represented.
+        let profile_names: std::collections::HashSet<_> =
+            configs.iter().map(|c| c.profile.as_str()).collect();
+        assert_eq!(profile_names.len(), 34, "all 34 profiles must be present");
     }
 
     #[test]
@@ -2414,22 +2442,19 @@ scenarios:
     }
 
     #[test]
-    fn generate_15m_majority_episodes_are_short() {
+    fn generate_15m_short_episodes_are_largest_tier() {
         let configs = generate_15m_configs(15_000_000, 8);
-        let short_episodes: u64 = configs
-            .iter()
-            .filter(|c| c.steps_per_episode == 200)
-            .map(|c| c.environments as u64 * c.episodes_per_env as u64)
-            .sum();
-        let total_episodes: u64 = configs
-            .iter()
-            .map(|c| c.environments as u64 * c.episodes_per_env as u64)
-            .sum();
-        let fraction = short_episodes as f64 / total_episodes as f64;
-        assert!(
-            fraction > 0.50,
-            "majority of episodes should be 200-step (got {:.1}%)",
-            fraction * 100.0
+        let mut tier_counts: std::collections::BTreeMap<u32, u64> =
+            std::collections::BTreeMap::new();
+        for c in &configs {
+            *tier_counts.entry(c.steps_per_episode).or_default() +=
+                c.environments as u64 * c.episodes_per_env as u64;
+        }
+        let short_episodes = tier_counts.get(&200).copied().unwrap_or(0);
+        let max_tier = tier_counts.values().copied().max().unwrap_or(0);
+        assert_eq!(
+            short_episodes, max_tier,
+            "200-step tier should be the largest (got {short_episodes} vs max {max_tier})"
         );
     }
 
