@@ -850,6 +850,200 @@ pub mod scenario_categories {
 }
 
 // ---------------------------------------------------------------------------
+// Category B: Joint Safety (1,500,000 episodes)
+// ---------------------------------------------------------------------------
+
+/// Category B: Joint Safety scenarios (Section 2, Category B).
+///
+/// Every P1-P4 boundary must be hit from both sides across every joint of
+/// every profile. These scenarios prove that the physics-invariant checks
+/// for position, velocity, torque, and acceleration reliably reject commands
+/// that exceed joint limits while approving commands at the boundary.
+///
+/// **Success criteria:** 0% violation escape rate — every command that exceeds
+/// a joint limit must be rejected. Commands at the exact boundary must pass.
+pub mod joint_safety {
+    use serde::{Deserialize, Serialize};
+
+    /// Total episodes allocated to Category B.
+    pub const TOTAL_EPISODES: u64 = 1_500_000;
+
+    /// Number of distinct scenarios in Category B.
+    pub const SCENARIO_COUNT: u32 = 8;
+
+    /// Maximum allowed violation escape rate for Category B.
+    /// Every over-limit command must be rejected — zero escapes.
+    pub const MAX_VIOLATION_ESCAPE_RATE: f64 = 0.0;
+
+    /// A scenario within Category B.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::joint_safety::JointSafetyScenario;
+    ///
+    /// let s = JointSafetyScenario::PositionBoundarySweep;
+    /// assert_eq!(s.id(), "B-01");
+    /// assert_eq!(s.episodes(), 200_000);
+    /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum JointSafetyScenario {
+        /// B-01: Each joint tested at min, max, min-epsilon, max+epsilon.
+        /// PASS at boundary, REJECT at epsilon-beyond.
+        PositionBoundarySweep,
+        /// B-02: Each joint at max_vel, max_vel+epsilon, 2x max_vel.
+        /// REJECT above limit.
+        VelocityBoundarySweep,
+        /// B-03: Each joint at max_torque +/- epsilon.
+        /// REJECT above limit.
+        TorqueBoundarySweep,
+        /// B-04: Gradual acceleration from 0 to 3x max, detect exact rejection point.
+        /// REJECT at limit.
+        AccelerationRamp,
+        /// B-05: All joints simultaneously at 99% then 101%.
+        /// PASS then REJECT.
+        MultiJointCoordinatedViolation,
+        /// B-06: Max positive velocity immediately to max negative.
+        /// Tests P4 acceleration limit.
+        RapidDirectionReversal,
+        /// B-07: NaN, +/-Inf, +/-0.0, subnormals, 1e308 in every numeric field.
+        /// REJECT all non-finite values.
+        Ieee754SpecialValues,
+        /// B-08: 0.0001 rad/step beyond limit, detect first rejection.
+        /// REJECT on first violation.
+        GradualDriftAttack,
+    }
+
+    impl JointSafetyScenario {
+        /// Returns all 8 scenarios in spec order.
+        pub fn all() -> &'static [JointSafetyScenario; 8] {
+            use JointSafetyScenario::*;
+            &[
+                PositionBoundarySweep,
+                VelocityBoundarySweep,
+                TorqueBoundarySweep,
+                AccelerationRamp,
+                MultiJointCoordinatedViolation,
+                RapidDirectionReversal,
+                Ieee754SpecialValues,
+                GradualDriftAttack,
+            ]
+        }
+
+        /// Spec identifier (e.g. "B-01").
+        pub fn id(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "B-01",
+                VelocityBoundarySweep => "B-02",
+                TorqueBoundarySweep => "B-03",
+                AccelerationRamp => "B-04",
+                MultiJointCoordinatedViolation => "B-05",
+                RapidDirectionReversal => "B-06",
+                Ieee754SpecialValues => "B-07",
+                GradualDriftAttack => "B-08",
+            }
+        }
+
+        /// Human-readable scenario name.
+        pub fn name(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "Position boundary sweep",
+                VelocityBoundarySweep => "Velocity boundary sweep",
+                TorqueBoundarySweep => "Torque boundary sweep",
+                AccelerationRamp => "Acceleration ramp",
+                MultiJointCoordinatedViolation => "Multi-joint coordinated violation",
+                RapidDirectionReversal => "Rapid direction reversal",
+                Ieee754SpecialValues => "IEEE 754 special values",
+                GradualDriftAttack => "Gradual drift attack",
+            }
+        }
+
+        /// Episode step count for this scenario.
+        pub fn steps(&self) -> u32 {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => 200,
+                VelocityBoundarySweep => 200,
+                TorqueBoundarySweep => 200,
+                AccelerationRamp => 300,
+                MultiJointCoordinatedViolation => 200,
+                RapidDirectionReversal => 200,
+                Ieee754SpecialValues => 200,
+                GradualDriftAttack => 500,
+            }
+        }
+
+        /// Number of episodes allocated to this scenario.
+        pub fn episodes(&self) -> u64 {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => 200_000,
+                VelocityBoundarySweep => 200_000,
+                TorqueBoundarySweep => 200_000,
+                AccelerationRamp => 200_000,
+                MultiJointCoordinatedViolation => 150_000,
+                RapidDirectionReversal => 150_000,
+                Ieee754SpecialValues => 200_000,
+                GradualDriftAttack => 200_000,
+            }
+        }
+
+        /// Expected verdict for this scenario.
+        pub fn expected_verdict(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "PASS at boundary, REJECT at epsilon-beyond",
+                VelocityBoundarySweep => "REJECT above limit",
+                TorqueBoundarySweep => "REJECT above limit",
+                AccelerationRamp => "REJECT at limit",
+                MultiJointCoordinatedViolation => "PASS then REJECT",
+                RapidDirectionReversal => "Test P4 acceleration",
+                Ieee754SpecialValues => "REJECT all non-finite",
+                GradualDriftAttack => "REJECT on first violation",
+            }
+        }
+
+        /// Physics invariants tested by this scenario.
+        pub fn invariants_tested(&self) -> &'static [&'static str] {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => &["P1"],
+                VelocityBoundarySweep => &["P2"],
+                TorqueBoundarySweep => &["P3"],
+                AccelerationRamp => &["P4"],
+                MultiJointCoordinatedViolation => &["P1", "P2", "P3"],
+                RapidDirectionReversal => &["P4"],
+                Ieee754SpecialValues => &["P1", "P2", "P3", "P4"],
+                GradualDriftAttack => &["P1"],
+            }
+        }
+
+        /// Maps to the `ScenarioType` variant name used by the scenario generator.
+        pub fn scenario_type_name(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "position_boundary_sweep",
+                VelocityBoundarySweep => "velocity_boundary_sweep",
+                TorqueBoundarySweep => "torque_boundary_sweep",
+                AccelerationRamp => "acceleration_ramp",
+                MultiJointCoordinatedViolation => "multi_joint_coordinated_violation",
+                RapidDirectionReversal => "rapid_direction_reversal",
+                Ieee754SpecialValues => "ieee754_special_values",
+                GradualDriftAttack => "gradual_drift_attack",
+            }
+        }
+    }
+
+    impl std::fmt::Display for JointSafetyScenario {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}: {}", self.id(), self.name())
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 15M Campaign Config Generator
 // ---------------------------------------------------------------------------
 
@@ -870,6 +1064,9 @@ fn scenario_step_count(scenario_type: &str) -> u32 {
         | "compound_environment_physics" => 500,
         // K: Recovery & resilience (500 steps)
         "recovery_safe_stop" | "recovery_audit_integrity" => 500,
+        // B: Joint safety — longer scenarios for ramp/drift detection
+        "acceleration_ramp" => 300,
+        "gradual_drift_attack" => 500,
         // A-H: Normal, safety, authority, temporal (200 steps)
         _ => 200,
     }
@@ -2321,5 +2518,212 @@ scenarios:
         assert_eq!(back.shard_id, 7);
         assert_eq!(back.episodes_completed, 1_875_000);
         assert_eq!(back.total_violation_escapes, 0);
+    }
+
+    // ── Category B: Joint Safety ──────────────────────────────────────
+
+    #[test]
+    fn joint_safety_scenario_count() {
+        use super::joint_safety::*;
+        assert_eq!(SCENARIO_COUNT, 8);
+        assert_eq!(JointSafetyScenario::all().len(), SCENARIO_COUNT as usize);
+    }
+
+    #[test]
+    fn joint_safety_total_episodes() {
+        use super::joint_safety::*;
+        assert_eq!(TOTAL_EPISODES, 1_500_000);
+        let sum: u64 = JointSafetyScenario::all().iter().map(|s| s.episodes()).sum();
+        assert_eq!(sum, TOTAL_EPISODES);
+    }
+
+    #[test]
+    fn joint_safety_episodes_consistent_with_category() {
+        use super::joint_safety;
+        use super::scenario_categories::ScenarioCategory;
+        assert_eq!(
+            joint_safety::TOTAL_EPISODES,
+            ScenarioCategory::JointSafety.episodes(),
+        );
+    }
+
+    #[test]
+    fn joint_safety_scenario_count_consistent_with_category() {
+        use super::joint_safety;
+        use super::scenario_categories::ScenarioCategory;
+        assert_eq!(
+            joint_safety::SCENARIO_COUNT,
+            ScenarioCategory::JointSafety.scenarios(),
+        );
+    }
+
+    #[test]
+    fn joint_safety_ids_sequential() {
+        use super::joint_safety::JointSafetyScenario;
+        let ids: Vec<&str> = JointSafetyScenario::all().iter().map(|s| s.id()).collect();
+        assert_eq!(
+            ids,
+            vec!["B-01", "B-02", "B-03", "B-04", "B-05", "B-06", "B-07", "B-08"]
+        );
+    }
+
+    #[test]
+    fn joint_safety_steps_within_spec_range() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                s.steps() >= 200 && s.steps() <= 1000,
+                "{} has {} steps, must be in [200, 1000]",
+                s.id(),
+                s.steps()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_steps_match_scenario_step_count() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert_eq!(
+                s.steps(),
+                super::scenario_step_count(s.scenario_type_name()),
+                "{} steps must match scenario_step_count(\"{}\")",
+                s.id(),
+                s.scenario_type_name()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_specific_episode_allocations() {
+        use super::joint_safety::JointSafetyScenario::*;
+        assert_eq!(PositionBoundarySweep.episodes(), 200_000);
+        assert_eq!(VelocityBoundarySweep.episodes(), 200_000);
+        assert_eq!(TorqueBoundarySweep.episodes(), 200_000);
+        assert_eq!(AccelerationRamp.episodes(), 200_000);
+        assert_eq!(MultiJointCoordinatedViolation.episodes(), 150_000);
+        assert_eq!(RapidDirectionReversal.episodes(), 150_000);
+        assert_eq!(Ieee754SpecialValues.episodes(), 200_000);
+        assert_eq!(GradualDriftAttack.episodes(), 200_000);
+    }
+
+    #[test]
+    fn joint_safety_specific_step_counts() {
+        use super::joint_safety::JointSafetyScenario::*;
+        assert_eq!(PositionBoundarySweep.steps(), 200);
+        assert_eq!(VelocityBoundarySweep.steps(), 200);
+        assert_eq!(TorqueBoundarySweep.steps(), 200);
+        assert_eq!(AccelerationRamp.steps(), 300);
+        assert_eq!(MultiJointCoordinatedViolation.steps(), 200);
+        assert_eq!(RapidDirectionReversal.steps(), 200);
+        assert_eq!(Ieee754SpecialValues.steps(), 200);
+        assert_eq!(GradualDriftAttack.steps(), 500);
+    }
+
+    #[test]
+    fn joint_safety_zero_escape_rate() {
+        use super::joint_safety::*;
+        assert!((MAX_VIOLATION_ESCAPE_RATE).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_have_names() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(!s.name().is_empty(), "{} must have a name", s.id());
+        }
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_have_expected_verdicts() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                !s.expected_verdict().is_empty(),
+                "{} must have an expected verdict",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_have_invariants() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                !s.invariants_tested().is_empty(),
+                "{} must test at least one invariant",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_invariants_are_p1_through_p4() {
+        use super::joint_safety::JointSafetyScenario;
+        let valid = ["P1", "P2", "P3", "P4"];
+        for s in JointSafetyScenario::all() {
+            for inv in s.invariants_tested() {
+                assert!(
+                    valid.contains(inv),
+                    "{} references invariant {} which is not P1-P4",
+                    s.id(),
+                    inv
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn joint_safety_display_format() {
+        use super::joint_safety::JointSafetyScenario;
+        let display = format!("{}", JointSafetyScenario::PositionBoundarySweep);
+        assert_eq!(display, "B-01: Position boundary sweep");
+    }
+
+    #[test]
+    fn joint_safety_serialization_round_trip() {
+        use super::joint_safety::JointSafetyScenario;
+        let s = JointSafetyScenario::Ieee754SpecialValues;
+        let json = serde_json::to_string(&s).expect("must serialize");
+        let back: JointSafetyScenario = serde_json::from_str(&json).expect("must deserialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_unique() {
+        use super::joint_safety::JointSafetyScenario;
+        let scenarios: Vec<_> = JointSafetyScenario::all().to_vec();
+        for (i, a) in scenarios.iter().enumerate() {
+            for (j, b) in scenarios.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b, "scenarios must be unique");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn joint_safety_scenario_type_names_nonempty() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                !s.scenario_type_name().is_empty(),
+                "{} must have a scenario_type_name",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_scenario_step_count_entries() {
+        assert_eq!(super::scenario_step_count("acceleration_ramp"), 300);
+        assert_eq!(super::scenario_step_count("gradual_drift_attack"), 500);
+        assert_eq!(super::scenario_step_count("position_boundary_sweep"), 200);
+        assert_eq!(super::scenario_step_count("velocity_boundary_sweep"), 200);
+        assert_eq!(super::scenario_step_count("torque_boundary_sweep"), 200);
+        assert_eq!(super::scenario_step_count("multi_joint_coordinated_violation"), 200);
+        assert_eq!(super::scenario_step_count("rapid_direction_reversal"), 200);
+        assert_eq!(super::scenario_step_count("ieee754_special_values"), 200);
     }
 }
