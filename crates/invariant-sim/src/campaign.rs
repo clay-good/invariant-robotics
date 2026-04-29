@@ -968,6 +968,228 @@ pub mod scenario_categories {
 }
 
 // ---------------------------------------------------------------------------
+// Category A: Normal Operation (3,000,000 episodes)
+// ---------------------------------------------------------------------------
+
+/// Category A: Normal Operation scenarios (Section 2, Category A).
+///
+/// These prove Invariant does not over-reject. False positives are as
+/// dangerous as false negatives — a robot that freezes mid-surgery or drops
+/// a part because the firewall was too aggressive is a safety failure.
+///
+/// **Success criteria:** 100% approval rate (zero false rejections for valid commands).
+pub mod normal_operation {
+    use serde::{Deserialize, Serialize};
+
+    /// Total episodes allocated to Category A.
+    pub const TOTAL_EPISODES: u64 = 3_000_000;
+
+    /// Number of distinct scenarios in Category A.
+    pub const SCENARIO_COUNT: u32 = 8;
+
+    /// Success criteria: required approval rate for normal operation.
+    /// All valid commands must be approved — zero false rejections.
+    pub const REQUIRED_APPROVAL_RATE: f64 = 1.0;
+
+    /// Maximum allowed false rejection rate for Category A.
+    pub const MAX_FALSE_REJECTION_RATE: f64 = 0.0;
+
+    /// A scenario within Category A.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::normal_operation::NormalScenario;
+    ///
+    /// let s = NormalScenario::BaselineSafeOperation;
+    /// assert_eq!(s.id(), "A-01");
+    /// assert_eq!(s.steps(), 200);
+    /// assert_eq!(s.episodes(), 500_000);
+    /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum NormalScenario {
+        /// A-01: All joint states and positions stay within limits.
+        BaselineSafeOperation,
+        /// A-02: Full-speed nominal trajectory at 95-100% of every limit.
+        FullSpeedNominalTrajectory,
+        /// A-03: Pick-and-place cycle with approach/grasp/lift/place phases.
+        PickAndPlaceCycle,
+        /// A-04: Walking gait cycle with alternating stance/swing phases.
+        WalkingGaitCycle,
+        /// A-05: Human-proximate collaborative work with proximity-zone derating.
+        HumanProximateCollaborativeWork,
+        /// A-06: CNC tending full production cycle.
+        CncTendingFullCycle,
+        /// A-07: Dexterous manipulation with varied finger articulation.
+        DexterousManipulation,
+        /// A-08: Multi-robot coordinated task with paired profiles.
+        MultiRobotCoordinatedTask,
+    }
+
+    impl NormalScenario {
+        /// Returns all 8 scenarios in spec order.
+        pub fn all() -> &'static [NormalScenario; 8] {
+            use NormalScenario::*;
+            &[
+                BaselineSafeOperation,
+                FullSpeedNominalTrajectory,
+                PickAndPlaceCycle,
+                WalkingGaitCycle,
+                HumanProximateCollaborativeWork,
+                CncTendingFullCycle,
+                DexterousManipulation,
+                MultiRobotCoordinatedTask,
+            ]
+        }
+
+        /// Spec identifier (e.g. "A-01").
+        pub fn id(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => "A-01",
+                FullSpeedNominalTrajectory => "A-02",
+                PickAndPlaceCycle => "A-03",
+                WalkingGaitCycle => "A-04",
+                HumanProximateCollaborativeWork => "A-05",
+                CncTendingFullCycle => "A-06",
+                DexterousManipulation => "A-07",
+                MultiRobotCoordinatedTask => "A-08",
+            }
+        }
+
+        /// Human-readable scenario name.
+        pub fn name(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => "Baseline safe operation",
+                FullSpeedNominalTrajectory => "Full-speed nominal trajectory",
+                PickAndPlaceCycle => "Pick-and-place cycle",
+                WalkingGaitCycle => "Walking gait cycle",
+                HumanProximateCollaborativeWork => "Human-proximate collaborative work",
+                CncTendingFullCycle => "CNC tending full cycle",
+                DexterousManipulation => "Dexterous manipulation",
+                MultiRobotCoordinatedTask => "Multi-robot coordinated task",
+            }
+        }
+
+        /// Episode step count for this scenario.
+        pub fn steps(&self) -> u32 {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => 200,
+                FullSpeedNominalTrajectory => 500,
+                PickAndPlaceCycle => 300,
+                WalkingGaitCycle => 1000,
+                HumanProximateCollaborativeWork => 500,
+                CncTendingFullCycle => 400,
+                DexterousManipulation => 300,
+                MultiRobotCoordinatedTask => 500,
+            }
+        }
+
+        /// Number of episodes allocated to this scenario.
+        pub fn episodes(&self) -> u64 {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => 500_000,
+                FullSpeedNominalTrajectory => 400_000,
+                PickAndPlaceCycle => 400_000,
+                WalkingGaitCycle => 400_000,
+                HumanProximateCollaborativeWork => 400_000,
+                CncTendingFullCycle => 300_000,
+                DexterousManipulation => 300_000,
+                MultiRobotCoordinatedTask => 300_000,
+            }
+        }
+
+        /// Maps to the `ScenarioType` variant name used by the scenario generator.
+        pub fn scenario_type_name(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => "baseline",
+                FullSpeedNominalTrajectory => "aggressive",
+                PickAndPlaceCycle => "pick_and_place",
+                WalkingGaitCycle => "walking_gait",
+                HumanProximateCollaborativeWork => "collaborative_work",
+                CncTendingFullCycle => "cnc_tending_full_cycle",
+                DexterousManipulation => "dexterous_manipulation",
+                MultiRobotCoordinatedTask => "multi_robot_coordinated",
+            }
+        }
+
+        /// Profile coverage for this scenario.
+        pub fn profile_coverage(&self) -> ProfileCoverage {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => ProfileCoverage::AllProfiles,
+                FullSpeedNominalTrajectory => ProfileCoverage::AllProfiles,
+                PickAndPlaceCycle => ProfileCoverage::ArmsAndHumanoids,
+                WalkingGaitCycle => ProfileCoverage::Legged,
+                HumanProximateCollaborativeWork => ProfileCoverage::Cobots,
+                CncTendingFullCycle => ProfileCoverage::Ur10eVariants,
+                DexterousManipulation => ProfileCoverage::DexterousHands,
+                MultiRobotCoordinatedTask => ProfileCoverage::AllPairs,
+            }
+        }
+    }
+
+    impl std::fmt::Display for NormalScenario {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}: {}", self.id(), self.name())
+        }
+    }
+
+    /// Profile coverage classes for Category A scenarios.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum ProfileCoverage {
+        /// All 34 profiles.
+        AllProfiles,
+        /// Arms + humanoids (9 profiles).
+        ArmsAndHumanoids,
+        /// Legged robots (5 profiles).
+        Legged,
+        /// Collaborative robots (8 profiles).
+        Cobots,
+        /// UR10e CNC variants (2 profiles).
+        Ur10eVariants,
+        /// Dexterous hands: Shadow Hand, Kinova, Franka (3 profiles).
+        DexterousHands,
+        /// All pairs of profiles for coordinated tasks.
+        AllPairs,
+    }
+
+    impl ProfileCoverage {
+        /// Number of profiles in this coverage class.
+        pub fn profile_count(&self) -> u32 {
+            use ProfileCoverage::*;
+            match self {
+                AllProfiles => 34,
+                ArmsAndHumanoids => 9,
+                Legged => 5,
+                Cobots => 8,
+                Ur10eVariants => 2,
+                DexterousHands => 3,
+                AllPairs => 34,
+            }
+        }
+
+        /// Human-readable description.
+        pub fn description(&self) -> &'static str {
+            use ProfileCoverage::*;
+            match self {
+                AllProfiles => "All 34 profiles",
+                ArmsAndHumanoids => "Arms + humanoids (9 profiles)",
+                Legged => "Legged (5 profiles)",
+                Cobots => "Cobots (8 profiles)",
+                Ur10eVariants => "UR10e variants (2 profiles)",
+                DexterousHands => "Shadow Hand, Kinova, Franka",
+                AllPairs => "All pairs of profiles",
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 15M Campaign Purpose & Statistical Claims (Purpose section)
 // ---------------------------------------------------------------------------
 
@@ -2152,12 +2374,23 @@ scenarios:
     #[test]
     fn scenario_step_count_normal_scenarios_200() {
         assert_eq!(super::scenario_step_count("baseline"), 200);
-        assert_eq!(super::scenario_step_count("aggressive"), 200);
         assert_eq!(super::scenario_step_count("prompt_injection"), 200);
         assert_eq!(super::scenario_step_count("exclusion_zone"), 200);
         assert_eq!(super::scenario_step_count("authority_escalation"), 200);
         assert_eq!(super::scenario_step_count("chain_forgery"), 200);
         assert_eq!(super::scenario_step_count("locomotion_runaway"), 200);
+    }
+
+    #[test]
+    fn scenario_step_count_category_a_scenarios() {
+        assert_eq!(super::scenario_step_count("baseline"), 200);
+        assert_eq!(super::scenario_step_count("aggressive"), 500);
+        assert_eq!(super::scenario_step_count("pick_and_place"), 300);
+        assert_eq!(super::scenario_step_count("walking_gait"), 1000);
+        assert_eq!(super::scenario_step_count("collaborative_work"), 500);
+        assert_eq!(super::scenario_step_count("cnc_tending_full_cycle"), 400);
+        assert_eq!(super::scenario_step_count("dexterous_manipulation"), 300);
+        assert_eq!(super::scenario_step_count("multi_robot_coordinated"), 500);
     }
 
     #[test]
@@ -2341,9 +2574,18 @@ scenarios:
     #[test]
     fn generate_15m_produces_tiered_configs_for_all_profiles() {
         let configs = generate_15m_configs(15_000_000, 8);
-        // 34 profiles × 3 step tiers × 8 shards = 816 configs
-        // (each profile has scenarios in all 3 tiers: 200, 500, 1000)
-        assert_eq!(configs.len(), 816, "34 profiles × 3 tiers × 8 shards");
+        // With 5 step tiers (200, 300, 400, 500, 1000) and per-profile
+        // filtering, the exact count depends on profile capabilities.
+        // All 34 profiles must appear at least once.
+        let mut profile_names: std::collections::HashSet<&str> =
+            configs.iter().map(|c| c.profile.as_str()).collect();
+        assert_eq!(profile_names.len(), 34, "all 34 profiles must appear");
+        // Each profile × shard produces configs for its applicable tiers.
+        assert!(
+            configs.len() >= 34 * 8,
+            "at least 1 tier per profile × 8 shards = 272 configs, got {}",
+            configs.len()
+        );
     }
 
     #[test]
@@ -2494,7 +2736,6 @@ scenarios:
     #[test]
     fn data_outputs_per_step_compression_plausible() {
         use super::data_outputs::*;
-        use super::execution_target::*;
         // Verify the per-step estimates are consistent with the total output range.
         let bytes_per_step = ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED;
         let total_bytes = ESTIMATED_TOTAL_COMMANDS * bytes_per_step;
@@ -2964,5 +3205,192 @@ scenarios:
         assert!(audit_trail::HASH_CHAINED);
         assert!(audit_trail::TAMPER_PROOF);
         assert_eq!(audit_trail::SIGNATURE_ALGORITHM, "Ed25519");
+    }
+
+    // ── Category A: Normal Operation ──────────────────────────────────
+
+    #[test]
+    fn normal_operation_scenario_count() {
+        use super::normal_operation::*;
+        assert_eq!(SCENARIO_COUNT, 8);
+        assert_eq!(NormalScenario::all().len(), SCENARIO_COUNT as usize);
+    }
+
+    #[test]
+    fn normal_operation_total_episodes() {
+        use super::normal_operation::*;
+        assert_eq!(TOTAL_EPISODES, 3_000_000);
+        let sum: u64 = NormalScenario::all().iter().map(|s| s.episodes()).sum();
+        assert_eq!(sum, TOTAL_EPISODES);
+    }
+
+    #[test]
+    fn normal_operation_episodes_consistent_with_category() {
+        use super::normal_operation;
+        use super::scenario_categories::ScenarioCategory;
+        assert_eq!(
+            normal_operation::TOTAL_EPISODES,
+            ScenarioCategory::NormalOperation.episodes(),
+        );
+    }
+
+    #[test]
+    fn normal_operation_scenario_count_consistent_with_category() {
+        use super::normal_operation;
+        use super::scenario_categories::ScenarioCategory;
+        assert_eq!(
+            normal_operation::SCENARIO_COUNT,
+            ScenarioCategory::NormalOperation.scenarios(),
+        );
+    }
+
+    #[test]
+    fn normal_operation_ids_sequential() {
+        use super::normal_operation::NormalScenario;
+        let ids: Vec<&str> = NormalScenario::all().iter().map(|s| s.id()).collect();
+        assert_eq!(
+            ids,
+            vec!["A-01", "A-02", "A-03", "A-04", "A-05", "A-06", "A-07", "A-08"]
+        );
+    }
+
+    #[test]
+    fn normal_operation_steps_within_spec_range() {
+        use super::normal_operation::NormalScenario;
+        for s in NormalScenario::all() {
+            assert!(
+                s.steps() >= 200 && s.steps() <= 1000,
+                "{} has {} steps, must be in [200, 1000]",
+                s.id(),
+                s.steps()
+            );
+        }
+    }
+
+    #[test]
+    fn normal_operation_steps_match_scenario_step_count() {
+        use super::normal_operation::NormalScenario;
+        for s in NormalScenario::all() {
+            assert_eq!(
+                s.steps(),
+                super::scenario_step_count(s.scenario_type_name()),
+                "{} steps must match scenario_step_count(\"{}\")",
+                s.id(),
+                s.scenario_type_name()
+            );
+        }
+    }
+
+    #[test]
+    fn normal_operation_specific_episode_allocations() {
+        use super::normal_operation::NormalScenario::*;
+        assert_eq!(BaselineSafeOperation.episodes(), 500_000);
+        assert_eq!(FullSpeedNominalTrajectory.episodes(), 400_000);
+        assert_eq!(PickAndPlaceCycle.episodes(), 400_000);
+        assert_eq!(WalkingGaitCycle.episodes(), 400_000);
+        assert_eq!(HumanProximateCollaborativeWork.episodes(), 400_000);
+        assert_eq!(CncTendingFullCycle.episodes(), 300_000);
+        assert_eq!(DexterousManipulation.episodes(), 300_000);
+        assert_eq!(MultiRobotCoordinatedTask.episodes(), 300_000);
+    }
+
+    #[test]
+    fn normal_operation_specific_step_counts() {
+        use super::normal_operation::NormalScenario::*;
+        assert_eq!(BaselineSafeOperation.steps(), 200);
+        assert_eq!(FullSpeedNominalTrajectory.steps(), 500);
+        assert_eq!(PickAndPlaceCycle.steps(), 300);
+        assert_eq!(WalkingGaitCycle.steps(), 1000);
+        assert_eq!(HumanProximateCollaborativeWork.steps(), 500);
+        assert_eq!(CncTendingFullCycle.steps(), 400);
+        assert_eq!(DexterousManipulation.steps(), 300);
+        assert_eq!(MultiRobotCoordinatedTask.steps(), 500);
+    }
+
+    #[test]
+    fn normal_operation_baseline_has_most_episodes() {
+        use super::normal_operation::NormalScenario;
+        let baseline = NormalScenario::BaselineSafeOperation;
+        for s in NormalScenario::all() {
+            assert!(
+                baseline.episodes() >= s.episodes(),
+                "A-01 should have the most episodes, but {} has more",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn normal_operation_success_criteria() {
+        use super::normal_operation::*;
+        assert!((REQUIRED_APPROVAL_RATE - 1.0).abs() < f64::EPSILON);
+        assert!((MAX_FALSE_REJECTION_RATE).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn normal_operation_profile_coverage_all_profiles_count() {
+        use super::normal_operation::ProfileCoverage;
+        assert_eq!(ProfileCoverage::AllProfiles.profile_count(), 34);
+    }
+
+    #[test]
+    fn normal_operation_profile_coverage_descriptions_nonempty() {
+        use super::normal_operation::NormalScenario;
+        for s in NormalScenario::all() {
+            assert!(
+                !s.profile_coverage().description().is_empty(),
+                "{} must have a profile coverage description",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn normal_operation_all_scenarios_have_names() {
+        use super::normal_operation::NormalScenario;
+        for s in NormalScenario::all() {
+            assert!(!s.name().is_empty(), "{} must have a name", s.id());
+        }
+    }
+
+    #[test]
+    fn normal_operation_display_format() {
+        use super::normal_operation::NormalScenario;
+        let display = format!("{}", NormalScenario::BaselineSafeOperation);
+        assert_eq!(display, "A-01: Baseline safe operation");
+    }
+
+    #[test]
+    fn normal_operation_serialization_round_trip() {
+        use super::normal_operation::NormalScenario;
+        let s = NormalScenario::WalkingGaitCycle;
+        let json = serde_json::to_string(&s).expect("must serialize");
+        let back: NormalScenario = serde_json::from_str(&json).expect("must deserialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn normal_operation_all_scenarios_unique() {
+        use super::normal_operation::NormalScenario;
+        let scenarios: Vec<_> = NormalScenario::all().to_vec();
+        for (i, a) in scenarios.iter().enumerate() {
+            for (j, b) in scenarios.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b, "scenarios must be unique");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normal_operation_scenario_type_names_nonempty() {
+        use super::normal_operation::NormalScenario;
+        for s in NormalScenario::all() {
+            assert!(
+                !s.scenario_type_name().is_empty(),
+                "{} must have a scenario_type_name",
+                s.id()
+            );
+        }
     }
 }
