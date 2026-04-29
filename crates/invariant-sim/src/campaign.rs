@@ -381,6 +381,8 @@ fn validate_config(config: &CampaignConfig) -> Result<(), CampaignError> {
 pub mod execution_target {
     /// Total episodes in the 15M campaign.
     pub const TOTAL_EPISODES: u64 = 15_000_000;
+    /// Target hardware: GPU model used for each shard.
+    pub const GPU_TYPE: &str = "NVIDIA A40";
     /// Number of GPU shards for parallel execution (8x NVIDIA A40).
     pub const SHARDS: u32 = 8;
     /// Episodes per shard (`TOTAL_EPISODES / SHARDS`).
@@ -397,6 +399,14 @@ pub mod execution_target {
     pub const REAL_WORLD_PROFILES: u32 = 30;
     /// Synthetic adversarial profiles.
     pub const ADVERSARIAL_PROFILES: u32 = 4;
+    /// Estimated wall time lower bound in hours (on 8x A40 RunPod).
+    pub const ESTIMATED_WALL_TIME_HOURS_LOW: u32 = 4;
+    /// Estimated wall time upper bound in hours (on 8x A40 RunPod).
+    pub const ESTIMATED_WALL_TIME_HOURS_HIGH: u32 = 6;
+    /// Estimated cost lower bound in USD (on RunPod).
+    pub const ESTIMATED_COST_USD_LOW: u32 = 30;
+    /// Estimated cost upper bound in USD (on RunPod).
+    pub const ESTIMATED_COST_USD_HIGH: u32 = 40;
 }
 
 // ---------------------------------------------------------------------------
@@ -2105,6 +2115,28 @@ scenarios:
         assert_eq!(VALIDATION_RATE_HZ, 200);
         // 200 Hz = 5 ms per step
         assert_eq!(1000 / VALIDATION_RATE_HZ, 5);
+    }
+
+    #[test]
+    fn execution_target_gpu_type() {
+        use super::execution_target::*;
+        assert_eq!(GPU_TYPE, "NVIDIA A40");
+    }
+
+    #[test]
+    fn execution_target_wall_time_range() {
+        use super::execution_target::*;
+        assert_eq!(ESTIMATED_WALL_TIME_HOURS_LOW, 4);
+        assert_eq!(ESTIMATED_WALL_TIME_HOURS_HIGH, 6);
+        assert!(ESTIMATED_WALL_TIME_HOURS_LOW < ESTIMATED_WALL_TIME_HOURS_HIGH);
+    }
+
+    #[test]
+    fn execution_target_cost_range() {
+        use super::execution_target::*;
+        assert_eq!(ESTIMATED_COST_USD_LOW, 30);
+        assert_eq!(ESTIMATED_COST_USD_HIGH, 40);
+        assert!(ESTIMATED_COST_USD_LOW < ESTIMATED_COST_USD_HIGH);
     }
 
     #[test]
