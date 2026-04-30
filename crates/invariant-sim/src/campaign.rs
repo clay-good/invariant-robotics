@@ -423,6 +423,7 @@ pub mod execution_target {
 /// validated commands and ~150-200 GB of compressed output.
 pub mod data_outputs {
     use super::*;
+    use sha2::{Digest, Sha256};
 
     /// Average steps per episode across all scenario tiers.
     ///
@@ -455,6 +456,243 @@ pub mod data_outputs {
     /// adds ~200 bytes per step on top of the command/verdict payload.
     /// After compression, the chain overhead is ~20 bytes/step.
     pub const CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED: u64 = 20;
+
+    // -----------------------------------------------------------------------
+    // Verdict chain types
+    // -----------------------------------------------------------------------
+
+    /// Genesis hash used as `previous_hash` for the first entry in every chain.
+    ///
+    /// This is the all-zeros SHA-256 digest encoded as `sha256:` followed by
+    /// 64 hex zeros — a value that cannot arise from real data and unambiguously
+    /// marks the chain anchor.
+    pub const GENESIS_HASH: &str =
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
+    /// Compute the SHA-256 of `data`, returning `"sha256:<hex>"`.
+    fn sha256_hex(data: &[u8]) -> String {
+        let digest = Sha256::digest(data);
+        format!("sha256:{:064x}", digest)
+    }
+
+    /// A single entry in the verdict chain.
+    ///
+    /// Each entry commits to its step index, the hash of the `SignedVerdict`
+    /// for that step, and the hash of the preceding entry.  The `entry_hash`
+    /// field is the SHA-256 of the concatenation
+    /// `step_le_bytes || previous_hash_bytes || verdict_hash_bytes`,
+    /// which binds the entry irrevocably to its position and predecessor.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::data_outputs::{VerdictChainBuilder, GENESIS_HASH};
+    ///
+    /// let mut builder = VerdictChainBuilder::new();
+    /// // An empty builder has the genesis hash as its terminal hash.
+    /// assert_eq!(builder.terminal_hash(), GENESIS_HASH);
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub struct VerdictChainEntry {
+        /// Zero-based step index within the episode.
+        pub step: u64,
+        /// SHA-256 of the JSON-serialised `SignedVerdict` for this step.
+        pub verdict_hash: String,
+        /// Hash of the preceding entry, or [`GENESIS_HASH`] for step 0.
+        pub previous_hash: String,
+        /// SHA-256 of `step_le_bytes || previous_hash_bytes || verdict_hash_bytes`.
+        ///
+        /// Verifying this field for every entry in sequence proves the chain
+        /// has not been modified or reordered.
+        pub entry_hash: String,
+    }
+
+    impl VerdictChainEntry {
+        /// Compute `entry_hash` from the constituent fields.
+        ///
+        /// The preimage is: `step.to_le_bytes() || previous_hash.as_bytes() || verdict_hash.as_bytes()`.
+        fn compute_entry_hash(step: u64, previous_hash: &str, verdict_hash: &str) -> String {
+            let mut input = Vec::with_capacity(8 + previous_hash.len() + verdict_hash.len());
+            input.extend_from_slice(&step.to_le_bytes());
+            input.extend_from_slice(previous_hash.as_bytes());
+            input.extend_from_slice(verdict_hash.as_bytes());
+            sha256_hex(&input)
+        }
+    }
+
+    /// A hash-linked chain of verdict entries for a single simulation episode.
+    ///
+    /// The chain is built step-by-step via [`VerdictChainBuilder`] and can be
+    /// verified in full with [`VerdictChain::verify`].  The terminal hash of the
+    /// chain (the `entry_hash` of the last entry, or [`GENESIS_HASH`] for an
+    /// empty episode) is stored in [`EpisodeOutput::verdict_chain_hash`] and
+    /// signed with an Ed25519 key to form the tamper-proof audit record.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::data_outputs::{VerdictChainBuilder, GENESIS_HASH};
+    ///
+    /// let chain = VerdictChainBuilder::new().finalize();
+    /// assert_eq!(chain.len(), 0);
+    /// assert_eq!(chain.terminal_hash(), GENESIS_HASH);
+    /// assert!(chain.verify());
+    /// ```
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct VerdictChain {
+        /// Ordered entries, one per validated step.
+        pub entries: Vec<VerdictChainEntry>,
+    }
+
+    impl VerdictChain {
+        /// Number of entries in the chain.
+        pub fn len(&self) -> usize {
+            self.entries.len()
+        }
+
+        /// Returns `true` when the chain has no entries.
+        pub fn is_empty(&self) -> bool {
+            self.entries.is_empty()
+        }
+
+        /// The hash of the last entry, or [`GENESIS_HASH`] for an empty chain.
+        ///
+        /// This value is stored in [`EpisodeOutput::verdict_chain_hash`] and
+        /// signed with the validator's Ed25519 key.
+        pub fn terminal_hash(&self) -> &str {
+            self.entries
+                .last()
+                .map(|e| e.entry_hash.as_str())
+                .unwrap_or(GENESIS_HASH)
+        }
+
+        /// Verify that every entry's `entry_hash` and `previous_hash` linkage
+        /// is consistent with the chain starting from [`GENESIS_HASH`].
+        ///
+        /// Returns `true` if the chain is intact, `false` if any entry has
+        /// been tampered with or if the order has been altered.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use invariant_robotics_sim::campaign::data_outputs::VerdictChainBuilder;
+        ///
+        /// let mut builder = VerdictChainBuilder::new();
+        /// builder.push_verdict_hash(0, "sha256:aaa");
+        /// builder.push_verdict_hash(1, "sha256:bbb");
+        /// let chain = builder.finalize();
+        /// assert!(chain.verify());
+        /// assert_eq!(chain.len(), 2);
+        /// ```
+        pub fn verify(&self) -> bool {
+            let mut expected_prev = GENESIS_HASH.to_string();
+            for entry in &self.entries {
+                if entry.previous_hash != expected_prev {
+                    return false;
+                }
+                let expected_hash = VerdictChainEntry::compute_entry_hash(
+                    entry.step,
+                    &entry.previous_hash,
+                    &entry.verdict_hash,
+                );
+                if entry.entry_hash != expected_hash {
+                    return false;
+                }
+                expected_prev = entry.entry_hash.clone();
+            }
+            true
+        }
+    }
+
+    /// Incrementally builds a [`VerdictChain`] as steps are validated.
+    ///
+    /// One `VerdictChainBuilder` is created per episode and receives one
+    /// verdict per step.  After all steps have been recorded, [`finalize`]
+    /// consumes the builder and returns the complete, verifiable chain.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::data_outputs::VerdictChainBuilder;
+    ///
+    /// let mut builder = VerdictChainBuilder::new();
+    /// // Hash a verdict's JSON and push it into the chain.
+    /// builder.push_verdict_hash(0, "sha256:deadbeef");
+    /// builder.push_verdict_hash(1, "sha256:cafebabe");
+    /// let chain = builder.finalize();
+    /// assert_eq!(chain.len(), 2);
+    /// assert!(chain.verify());
+    /// ```
+    pub struct VerdictChainBuilder {
+        entries: Vec<VerdictChainEntry>,
+        previous_hash: String,
+    }
+
+    impl Default for VerdictChainBuilder {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl VerdictChainBuilder {
+        /// Create a new builder anchored at [`GENESIS_HASH`].
+        pub fn new() -> Self {
+            VerdictChainBuilder {
+                entries: Vec::new(),
+                previous_hash: GENESIS_HASH.to_string(),
+            }
+        }
+
+        /// Current terminal hash (hash of the last pushed entry, or [`GENESIS_HASH`]).
+        pub fn terminal_hash(&self) -> &str {
+            &self.previous_hash
+        }
+
+        /// Append an entry using a pre-computed `verdict_hash`.
+        ///
+        /// Use this when you have already serialised and hashed the
+        /// `SignedVerdict` externally.
+        ///
+        /// Returns a reference to the newly appended [`VerdictChainEntry`].
+        pub fn push_verdict_hash(&mut self, step: u64, verdict_hash: &str) -> &VerdictChainEntry {
+            let entry_hash = VerdictChainEntry::compute_entry_hash(
+                step,
+                &self.previous_hash,
+                verdict_hash,
+            );
+            let entry = VerdictChainEntry {
+                step,
+                verdict_hash: verdict_hash.to_string(),
+                previous_hash: self.previous_hash.clone(),
+                entry_hash: entry_hash.clone(),
+            };
+            self.previous_hash = entry_hash;
+            self.entries.push(entry);
+            self.entries.last().unwrap()
+        }
+
+        /// Append an entry by hashing the JSON-serialised `SignedVerdict`.
+        ///
+        /// Serialises `verdict` to JSON, hashes it with SHA-256, and appends
+        /// the resulting entry to the chain.  Returns `None` if serialisation
+        /// fails (which cannot happen for well-formed `SignedVerdict` values).
+        pub fn push_signed_verdict(
+            &mut self,
+            step: u64,
+            verdict: &invariant_core::models::verdict::SignedVerdict,
+        ) -> Option<&VerdictChainEntry> {
+            let json = serde_json::to_vec(verdict).ok()?;
+            let verdict_hash = sha256_hex(&json);
+            Some(self.push_verdict_hash(step, &verdict_hash))
+        }
+
+        /// Consume the builder and return the completed [`VerdictChain`].
+        pub fn finalize(self) -> VerdictChain {
+            VerdictChain {
+                entries: self.entries,
+            }
+        }
+    }
 
     /// The complete output of a single simulation episode.
     ///
@@ -2511,6 +2749,199 @@ scenarios:
             total_gb >= ESTIMATED_OUTPUT_GB_LOW && total_gb <= ESTIMATED_OUTPUT_GB_HIGH * 2,
             "per-step estimate ({bytes_per_step} B/step) yields {total_gb} GB, expected ~{ESTIMATED_OUTPUT_GB_LOW}-{ESTIMATED_OUTPUT_GB_HIGH} GB"
         );
+    }
+
+    // ── VerdictChain tests ──────────────────────────────────────────
+
+    #[test]
+    fn empty_chain_has_genesis_terminal_hash() {
+        use super::data_outputs::{VerdictChainBuilder, GENESIS_HASH};
+        let chain = VerdictChainBuilder::new().finalize();
+        assert_eq!(chain.terminal_hash(), GENESIS_HASH);
+        assert_eq!(chain.len(), 0);
+        assert!(chain.is_empty());
+    }
+
+    #[test]
+    fn empty_chain_verifies() {
+        use super::data_outputs::VerdictChainBuilder;
+        let chain = VerdictChainBuilder::new().finalize();
+        assert!(chain.verify());
+    }
+
+    #[test]
+    fn builder_terminal_hash_matches_chain_terminal() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:aaa");
+        builder.push_verdict_hash(1, "sha256:bbb");
+        let terminal = builder.terminal_hash().to_string();
+        let chain = builder.finalize();
+        assert_eq!(chain.terminal_hash(), terminal);
+    }
+
+    #[test]
+    fn single_entry_chain_verifies() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:deadbeef");
+        let chain = builder.finalize();
+        assert_eq!(chain.len(), 1);
+        assert!(chain.verify());
+    }
+
+    #[test]
+    fn multi_entry_chain_verifies() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        for i in 0..10u64 {
+            builder.push_verdict_hash(i, &format!("sha256:{:064x}", i));
+        }
+        let chain = builder.finalize();
+        assert_eq!(chain.len(), 10);
+        assert!(chain.verify());
+    }
+
+    #[test]
+    fn chain_entry_previous_hash_is_chained() {
+        use super::data_outputs::{VerdictChainBuilder, GENESIS_HASH};
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:aaa");
+        builder.push_verdict_hash(1, "sha256:bbb");
+        let chain = builder.finalize();
+        // First entry links to GENESIS_HASH
+        assert_eq!(chain.entries[0].previous_hash, GENESIS_HASH);
+        // Second entry links to first entry's hash
+        assert_eq!(chain.entries[1].previous_hash, chain.entries[0].entry_hash);
+    }
+
+    #[test]
+    fn tampered_entry_hash_fails_verify() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:aaa");
+        builder.push_verdict_hash(1, "sha256:bbb");
+        let mut chain = builder.finalize();
+        // Tamper with the entry_hash of the first entry
+        chain.entries[0].entry_hash = "sha256:tampered".to_string();
+        assert!(!chain.verify());
+    }
+
+    #[test]
+    fn tampered_verdict_hash_fails_verify() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:aaa");
+        builder.push_verdict_hash(1, "sha256:bbb");
+        let mut chain = builder.finalize();
+        // Tamper with the verdict_hash of the first entry
+        chain.entries[0].verdict_hash = "sha256:tampered".to_string();
+        assert!(!chain.verify());
+    }
+
+    #[test]
+    fn tampered_previous_hash_fails_verify() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:aaa");
+        builder.push_verdict_hash(1, "sha256:bbb");
+        let mut chain = builder.finalize();
+        // Break the linkage of the second entry
+        chain.entries[1].previous_hash = "sha256:tampered".to_string();
+        assert!(!chain.verify());
+    }
+
+    #[test]
+    fn push_signed_verdict_produces_verifiable_chain() {
+        use chrono::Utc;
+        use invariant_core::models::verdict::{
+            AuthoritySummary, CheckResult, SignedVerdict, Verdict,
+        };
+        use super::data_outputs::VerdictChainBuilder;
+
+        let make_sv = |seq: u64, approved: bool| SignedVerdict {
+            verdict: Verdict {
+                approved,
+                command_hash: format!("sha256:{seq:064x}"),
+                command_sequence: seq,
+                timestamp: Utc::now(),
+                checks: vec![CheckResult {
+                    name: "joint_limits".into(),
+                    category: "physics".into(),
+                    passed: approved,
+                    details: "ok".into(),
+                    derating: None,
+                }],
+                profile_name: "franka_panda".into(),
+                profile_hash: "sha256:profile".into(),
+                threat_analysis: None,
+                authority_summary: AuthoritySummary {
+                    origin_principal: "operator".into(),
+                    hop_count: 1,
+                    operations_granted: vec![],
+                    operations_required: vec![],
+                },
+            },
+            verdict_signature: "sig".into(),
+            signer_kid: "kid-1".into(),
+        };
+
+        let mut builder = VerdictChainBuilder::new();
+        for i in 0..5u64 {
+            let sv = make_sv(i, i % 2 == 0);
+            let entry = builder.push_signed_verdict(i, &sv);
+            assert!(entry.is_some(), "push_signed_verdict must succeed");
+        }
+        let chain = builder.finalize();
+        assert_eq!(chain.len(), 5);
+        assert!(chain.verify());
+    }
+
+    #[test]
+    fn chain_terminal_hash_differs_from_genesis() {
+        use super::data_outputs::{VerdictChainBuilder, GENESIS_HASH};
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:data");
+        let chain = builder.finalize();
+        assert_ne!(chain.terminal_hash(), GENESIS_HASH);
+    }
+
+    #[test]
+    fn two_chains_same_verdicts_same_terminal() {
+        use super::data_outputs::VerdictChainBuilder;
+        let verdicts = ["sha256:aaa", "sha256:bbb", "sha256:ccc"];
+        let mut b1 = VerdictChainBuilder::new();
+        let mut b2 = VerdictChainBuilder::new();
+        for (i, v) in verdicts.iter().enumerate() {
+            b1.push_verdict_hash(i as u64, v);
+            b2.push_verdict_hash(i as u64, v);
+        }
+        assert_eq!(b1.finalize().terminal_hash(), b2.finalize().terminal_hash());
+    }
+
+    #[test]
+    fn two_chains_different_verdicts_different_terminal() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut b1 = VerdictChainBuilder::new();
+        let mut b2 = VerdictChainBuilder::new();
+        b1.push_verdict_hash(0, "sha256:aaa");
+        b2.push_verdict_hash(0, "sha256:bbb");
+        assert_ne!(b1.finalize().terminal_hash(), b2.finalize().terminal_hash());
+    }
+
+    #[test]
+    fn chain_serialization_round_trip() {
+        use super::data_outputs::VerdictChainBuilder;
+        let mut builder = VerdictChainBuilder::new();
+        builder.push_verdict_hash(0, "sha256:aaa");
+        builder.push_verdict_hash(1, "sha256:bbb");
+        let chain = builder.finalize();
+        let json = serde_json::to_string(&chain).expect("must serialize");
+        let back: super::data_outputs::VerdictChain =
+            serde_json::from_str(&json).expect("must deserialize");
+        assert_eq!(back.len(), 2);
+        assert!(back.verify());
+        assert_eq!(back.terminal_hash(), chain.terminal_hash());
     }
 
     // ── EpisodeOutput tests ─────────────────────────────────────────
