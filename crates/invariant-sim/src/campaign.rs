@@ -2503,7 +2503,6 @@ scenarios:
     #[test]
     fn data_outputs_per_step_compression_plausible() {
         use super::data_outputs::*;
-        use super::execution_target::*;
         // Verify the per-step estimates are consistent with the total output range.
         let bytes_per_step = ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED;
         let total_bytes = ESTIMATED_TOTAL_COMMANDS * bytes_per_step;
