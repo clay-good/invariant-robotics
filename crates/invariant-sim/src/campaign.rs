@@ -397,6 +397,14 @@ pub mod execution_target {
     pub const REAL_WORLD_PROFILES: u32 = 30;
     /// Synthetic adversarial profiles.
     pub const ADVERSARIAL_PROFILES: u32 = 4;
+    /// Estimated wall-clock time lower bound in hours (8x NVIDIA A40 on RunPod).
+    pub const ESTIMATED_WALL_TIME_HOURS_LOW: u32 = 4;
+    /// Estimated wall-clock time upper bound in hours (8x NVIDIA A40 on RunPod).
+    pub const ESTIMATED_WALL_TIME_HOURS_HIGH: u32 = 6;
+    /// Estimated RunPod cost lower bound in USD.
+    pub const ESTIMATED_COST_USD_LOW: u32 = 30;
+    /// Estimated RunPod cost upper bound in USD.
+    pub const ESTIMATED_COST_USD_HIGH: u32 = 40;
 }
 
 // ---------------------------------------------------------------------------
@@ -2105,6 +2113,22 @@ scenarios:
         assert_eq!(MIN_EPISODE_STEPS, 200);
         assert_eq!(MAX_EPISODE_STEPS, 1000);
         assert!(MIN_EPISODE_STEPS < MAX_EPISODE_STEPS);
+    }
+
+    #[test]
+    fn execution_target_wall_time_range() {
+        use super::execution_target::*;
+        assert_eq!(ESTIMATED_WALL_TIME_HOURS_LOW, 4);
+        assert_eq!(ESTIMATED_WALL_TIME_HOURS_HIGH, 6);
+        assert!(ESTIMATED_WALL_TIME_HOURS_LOW < ESTIMATED_WALL_TIME_HOURS_HIGH);
+    }
+
+    #[test]
+    fn execution_target_cost_range() {
+        use super::execution_target::*;
+        assert_eq!(ESTIMATED_COST_USD_LOW, 30);
+        assert_eq!(ESTIMATED_COST_USD_HIGH, 40);
+        assert!(ESTIMATED_COST_USD_LOW < ESTIMATED_COST_USD_HIGH);
     }
 
     // ── Scenario step count mapping ─────────────────────────────────
