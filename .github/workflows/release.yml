@@ -90,7 +90,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install cargo-cyclonedx
       - run: cargo cyclonedx --all --format json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: "*.cdx.json"
@@ -143,7 +143,7 @@ jobs:
           tar czf invariant-${{ matrix.target }}.tar.gz invariant
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/invariant-${{ matrix.target }}.tar.gz
