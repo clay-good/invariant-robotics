@@ -835,7 +835,7 @@ pub mod scenario_categories {
     pub const CATEGORY_COUNT: usize = 14;
 
     /// Total distinct scenarios across all categories.
-    pub const TOTAL_SCENARIOS: u32 = 104;
+    pub const TOTAL_SCENARIOS: u32 = 106;
 
     /// Total episodes across all categories (must equal 15M).
     pub const TOTAL_EPISODES: u64 = 15_000_000;
@@ -851,7 +851,7 @@ pub mod scenario_categories {
     ///
     /// let cat = ScenarioCategory::NormalOperation;
     /// assert_eq!(cat.letter(), 'A');
-    /// assert_eq!(cat.scenarios(), 6);
+    /// assert_eq!(cat.scenarios(), 8);
     /// assert_eq!(cat.episodes(), 3_000_000);
     /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -954,7 +954,7 @@ pub mod scenario_categories {
         pub fn scenarios(&self) -> u32 {
             use ScenarioCategory::*;
             match self {
-                NormalOperation => 6,
+                NormalOperation => 8,
                 JointSafety => 8,
                 SpatialSafety => 6,
                 StabilityLocomotion => 10,
@@ -1176,6 +1176,222 @@ pub mod purpose {
 }
 
 // ---------------------------------------------------------------------------
+// Category A: Normal Operation (Section 2.2.A)
+// ---------------------------------------------------------------------------
+
+/// Scenario specifications for Category A: Normal Operation (3,000,000 episodes).
+///
+/// These prove Invariant does not over-reject. False positives are as dangerous
+/// as false negatives — a robot that freezes mid-surgery or drops a part because
+/// the firewall was too aggressive is a safety failure.
+///
+/// **Success criteria:** 100% approval rate (zero false rejections for valid
+/// commands).
+pub mod normal_operation {
+    use serde::{Deserialize, Serialize};
+
+    /// Total episodes allocated to Category A.
+    pub const TOTAL_EPISODES: u64 = 3_000_000;
+
+    /// Number of distinct scenarios in Category A (A-01 through A-08).
+    pub const SCENARIO_COUNT: u32 = 8;
+
+    /// A normal operation scenario in the 15M campaign.
+    ///
+    /// Each variant maps to one row in the Category A table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::normal_operation::NormalScenario;
+    ///
+    /// let scenario = NormalScenario::BaselineSafeOperation;
+    /// assert_eq!(scenario.id(), "A-01");
+    /// assert_eq!(scenario.episodes(), 500_000);
+    /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum NormalScenario {
+        /// A-01: All commands within safe limits across all 34 profiles.
+        BaselineSafeOperation,
+        /// A-02: Commands at full speed but within all limits.
+        FullSpeedNominalTrajectory,
+        /// A-03: Pick-and-place cycle for arms + humanoids (9 profiles).
+        PickAndPlaceCycle,
+        /// A-04: Walking gait cycle for legged robots (5 profiles).
+        WalkingGaitCycle,
+        /// A-05: Collaborative work with human-proximate cobots (8 profiles).
+        HumanProximateCollaborative,
+        /// A-06: Full CNC tending cycle for UR10e variants (2 profiles).
+        CncTendingFullCycle,
+        /// A-07: Dexterous manipulation for Shadow Hand, Kinova, Franka.
+        DexterousManipulation,
+        /// A-08: Multi-robot coordinated task across all pairs of profiles.
+        MultiRobotCoordinated,
+    }
+
+    impl NormalScenario {
+        /// Returns all 8 scenarios in spec order.
+        pub fn all() -> &'static [NormalScenario; 8] {
+            use NormalScenario::*;
+            &[
+                BaselineSafeOperation,
+                FullSpeedNominalTrajectory,
+                PickAndPlaceCycle,
+                WalkingGaitCycle,
+                HumanProximateCollaborative,
+                CncTendingFullCycle,
+                DexterousManipulation,
+                MultiRobotCoordinated,
+            ]
+        }
+
+        /// Scenario identifier (e.g. "A-01").
+        pub fn id(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => "A-01",
+                FullSpeedNominalTrajectory => "A-02",
+                PickAndPlaceCycle => "A-03",
+                WalkingGaitCycle => "A-04",
+                HumanProximateCollaborative => "A-05",
+                CncTendingFullCycle => "A-06",
+                DexterousManipulation => "A-07",
+                MultiRobotCoordinated => "A-08",
+            }
+        }
+
+        /// Human-readable scenario name.
+        pub fn name(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => "Baseline safe operation",
+                FullSpeedNominalTrajectory => "Full-speed nominal trajectory",
+                PickAndPlaceCycle => "Pick-and-place cycle",
+                WalkingGaitCycle => "Walking gait cycle",
+                HumanProximateCollaborative => "Human-proximate collaborative work",
+                CncTendingFullCycle => "CNC tending full cycle",
+                DexterousManipulation => "Dexterous manipulation",
+                MultiRobotCoordinated => "Multi-robot coordinated task",
+            }
+        }
+
+        /// Number of episodes allocated to this scenario.
+        pub fn episodes(&self) -> u64 {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => 500_000,
+                FullSpeedNominalTrajectory => 400_000,
+                PickAndPlaceCycle => 400_000,
+                WalkingGaitCycle => 400_000,
+                HumanProximateCollaborative => 400_000,
+                CncTendingFullCycle => 400_000,
+                DexterousManipulation => 300_000,
+                MultiRobotCoordinated => 300_000,
+            }
+        }
+
+        /// Expected verdict for this scenario — all commands must be approved.
+        pub fn expected_verdict(&self) -> ExpectedVerdict {
+            ExpectedVerdict::Pass
+        }
+
+        /// Steps per episode for this scenario (per spec).
+        pub fn steps(&self) -> u32 {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => 200,
+                FullSpeedNominalTrajectory => 500,
+                PickAndPlaceCycle => 300,
+                WalkingGaitCycle => 1000,
+                HumanProximateCollaborative => 500,
+                CncTendingFullCycle => 400,
+                DexterousManipulation => 300,
+                MultiRobotCoordinated => 500,
+            }
+        }
+
+        /// Profile coverage description for this scenario.
+        pub fn profile_coverage(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => "All 34 profiles",
+                FullSpeedNominalTrajectory => "All 34 profiles",
+                PickAndPlaceCycle => "Arms + humanoids (9 profiles)",
+                WalkingGaitCycle => "Legged (5 profiles)",
+                HumanProximateCollaborative => "Cobots (8 profiles)",
+                CncTendingFullCycle => "UR10e variants (2 profiles)",
+                DexterousManipulation => "Shadow Hand, Kinova, Franka",
+                MultiRobotCoordinated => "All pairs of profiles",
+            }
+        }
+
+        /// Detailed description of what this scenario tests.
+        pub fn description(&self) -> &'static str {
+            use NormalScenario::*;
+            match self {
+                BaselineSafeOperation => {
+                    "All joint states at midpoint, EE inside workspace, \
+                     valid authority. Every command must be APPROVED."
+                }
+                FullSpeedNominalTrajectory => {
+                    "Commands at 95% of all limits (position, velocity, torque). \
+                     All within bounds — must be APPROVED."
+                }
+                PickAndPlaceCycle => {
+                    "Simulated pick-and-place: alternating approach, grasp, lift, \
+                     move, place phases. All within safe limits."
+                }
+                WalkingGaitCycle => {
+                    "Full gait cycle with valid locomotion state, foot contacts, \
+                     and base velocity within P15-P20 limits."
+                }
+                HumanProximateCollaborative => {
+                    "EE within proximity zones with velocity scaled per P10. \
+                     All commands respect proximity scaling — must be APPROVED."
+                }
+                CncTendingFullCycle => {
+                    "Complete CNC tending cycle with zone overrides correctly \
+                     synchronized. EE safe in each phase — must be APPROVED."
+                }
+                DexterousManipulation => {
+                    "Fine-grained joint movements within limits for dexterous \
+                     manipulation tasks. All forces within P11-P14."
+                }
+                MultiRobotCoordinated => {
+                    "Valid commands from alternating sources with monotonic \
+                     sequences and correct authority. Must be APPROVED."
+                }
+            }
+        }
+
+        /// Fraction of Category A episodes allocated to this scenario.
+        pub fn weight(&self) -> f64 {
+            self.episodes() as f64 / TOTAL_EPISODES as f64
+        }
+    }
+
+    impl std::fmt::Display for NormalScenario {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}: {}", self.id(), self.name())
+        }
+    }
+
+    /// Expected verdict classification for a scenario.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum ExpectedVerdict {
+        /// All commands should be approved.
+        Pass,
+    }
+
+    impl ExpectedVerdict {
+        /// Whether this verdict requires zero false rejections.
+        pub fn requires_zero_false_rejections(&self) -> bool {
+            true
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Category C: Spatial Safety (Section 2.2.C)
 // ---------------------------------------------------------------------------
 
@@ -1369,6 +1585,8 @@ fn scenario_step_count(scenario_type: &str) -> u32 {
     match scenario_type {
         // L: Long-running stability (1000 steps)
         "long_running_stability" | "long_running_threat" => 1000,
+        // A-04: Walking gait cycle (1000 steps)
+        "walking_gait" => 1000,
         // I/J: Compound multi-step attacks (500 steps)
         "compound_authority_physics"
         | "compound_sensor_spatial"
@@ -1376,6 +1594,18 @@ fn scenario_step_count(scenario_type: &str) -> u32 {
         | "compound_environment_physics" => 500,
         // K: Recovery & resilience (500 steps)
         "recovery_safe_stop" | "recovery_audit_integrity" => 500,
+        // A-02: Full-speed nominal trajectory (500 steps)
+        "full_speed_nominal" => 500,
+        // A-05: Human-proximate collaborative (500 steps)
+        "human_proximate" => 500,
+        // A-08: Multi-robot coordinated (500 steps)
+        "multi_robot_coordinated" => 500,
+        // A-06: CNC tending full cycle (400 steps)
+        "nominal_cnc_tending" => 400,
+        // A-03: Pick-and-place cycle (300 steps)
+        "pick_and_place" => 300,
+        // A-07: Dexterous manipulation (300 steps)
+        "dexterous_manipulation" => 300,
         // A-H: Normal, safety, authority, temporal (200 steps)
         _ => 200,
     }
@@ -1396,6 +1626,12 @@ fn all_scenario_entries() -> Vec<ScenarioConfig> {
         // A: Normal operation
         ("baseline", 3.0),
         ("aggressive", 2.0),
+        ("pick_and_place", 1.5),
+        ("walking_gait", 1.5),
+        ("human_proximate", 1.5),
+        ("nominal_cnc_tending", 1.5),
+        ("dexterous_manipulation", 1.0),
+        ("multi_robot_coordinated", 1.0),
         // B: Joint safety
         ("prompt_injection", 2.0),
         // C: Spatial safety
@@ -2334,7 +2570,7 @@ scenarios:
         use super::scenario_categories::*;
         let sum: u32 = ScenarioCategory::all().iter().map(|c| c.scenarios()).sum();
         assert_eq!(sum, TOTAL_SCENARIOS);
-        assert_eq!(TOTAL_SCENARIOS, 104);
+        assert_eq!(TOTAL_SCENARIOS, 106);
     }
 
     #[test]
@@ -2469,9 +2705,9 @@ scenarios:
     #[test]
     fn generate_15m_produces_tiered_configs_for_all_profiles() {
         let configs = generate_15m_configs(15_000_000, 8);
-        // 34 profiles × 3 step tiers × 8 shards = 816 configs
-        // (each profile has scenarios in all 3 tiers: 200, 500, 1000)
-        assert_eq!(configs.len(), 816, "34 profiles × 3 tiers × 8 shards");
+        // 34 profiles × 5 step tiers × 8 shards = 1360 configs
+        // (each profile has scenarios in all 5 tiers: 200, 300, 400, 500, 1000)
+        assert_eq!(configs.len(), 1360, "34 profiles × 5 tiers × 8 shards");
     }
 
     #[test]
