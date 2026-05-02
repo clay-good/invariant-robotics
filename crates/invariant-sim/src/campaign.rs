@@ -978,7 +978,7 @@ pub mod data_outputs {
 
 /// Scenario categories for the 15M campaign (Section 2.1 Overview).
 ///
-/// The 15M campaign is divided into 14 categories (A–N), totaling 104
+/// The 15M campaign is divided into 14 categories (A–N), totaling 106
 /// distinct scenarios and 15,000,000 episodes. Each category targets a
 /// specific safety domain — from normal operation through adversarial
 /// red-teaming — ensuring complete coverage of the Invariant firewall's
@@ -1200,6 +1200,251 @@ pub mod scenario_categories {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{}: {}", self.letter(), self.name())
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Category A: Normal Operation (3,000,000 episodes)
+// ---------------------------------------------------------------------------
+
+/// Category A scenario specifications for the 15M campaign.
+///
+/// These 8 scenarios prove Invariant does not over-reject. False positives are
+/// as dangerous as false negatives — a robot that freezes mid-surgery or drops
+/// a part because the firewall was too aggressive is a safety failure.
+///
+/// **Success criteria:** 100% approval rate (zero false rejections for valid commands).
+pub mod category_a {
+    /// Total episodes allocated to Category A.
+    ///
+    /// The overview table (Section 2.1) rounds this to 3,000,000. The detailed
+    /// per-scenario allocations below sum to 3,100,000; the detailed values
+    /// are canonical.
+    pub const TOTAL_EPISODES: u64 = 3_100_000;
+
+    /// Number of distinct scenarios in Category A.
+    pub const SCENARIO_COUNT: u32 = 8;
+
+    /// Category A requires zero false rejections.
+    pub const REQUIRED_APPROVAL_RATE: f64 = 1.0;
+
+    /// Category A requires zero false rejections (explicit count).
+    pub const MAX_FALSE_REJECTIONS: u64 = 0;
+
+    /// A single Category A scenario specification.
+    #[derive(Debug, Clone)]
+    pub struct NormalOperationScenario {
+        /// Scenario identifier (e.g. "A-01").
+        pub id: &'static str,
+        /// Human-readable name.
+        pub name: &'static str,
+        /// Scenario type key matching `ScenarioType` variant (snake_case).
+        pub scenario_type: &'static str,
+        /// Steps per episode.
+        pub steps: u32,
+        /// Episodes allocated to this scenario.
+        pub episodes: u64,
+        /// Profile names that participate in this scenario.
+        pub profiles: &'static [&'static str],
+        /// Physics/authority invariants exercised (pass path).
+        pub invariants_exercised: &'static [&'static str],
+    }
+
+    /// All 34 profile names in the campaign (30 real-world + 4 adversarial).
+    pub const ALL_PROFILES: &[&str] = &[
+        "humanoid_28dof",
+        "unitree_h1",
+        "unitree_g1",
+        "fourier_gr1",
+        "tesla_optimus",
+        "figure_02",
+        "bd_atlas",
+        "agility_digit",
+        "sanctuary_phoenix",
+        "onex_neo",
+        "apptronik_apollo",
+        "quadruped_12dof",
+        "spot",
+        "unitree_go2",
+        "unitree_a1",
+        "anybotics_anymal",
+        "franka_panda",
+        "ur10",
+        "ur10e_haas_cell",
+        "ur10e_cnc_tending",
+        "kuka_iiwa14",
+        "kinova_gen3",
+        "abb_gofa",
+        "shadow_hand",
+        "allegro_hand",
+        "leap_hand",
+        "psyonic_ability",
+        "spot_with_arm",
+        "hello_stretch",
+        "pal_tiago",
+        "adversarial_zero_margin",
+        "adversarial_max_workspace",
+        "adversarial_single_joint",
+        "adversarial_max_joints",
+    ];
+
+    /// Arms + humanoids subset for A-03 pick-and-place.
+    pub const PICK_AND_PLACE_PROFILES: &[&str] = &[
+        "franka_panda",
+        "kuka_iiwa14",
+        "kinova_gen3",
+        "abb_gofa",
+        "ur10",
+        "ur10e_haas_cell",
+        "ur10e_cnc_tending",
+        "humanoid_28dof",
+        "unitree_h1",
+        "unitree_g1",
+    ];
+
+    /// Legged profiles for A-04 walking gait.
+    pub const WALKING_GAIT_PROFILES: &[&str] = &[
+        "spot",
+        "quadruped_12dof",
+        "unitree_h1",
+        "unitree_g1",
+        "humanoid_28dof",
+    ];
+
+    /// Cobot profiles for A-05 human-proximate collaborative work.
+    pub const COLLABORATIVE_PROFILES: &[&str] = &[
+        "franka_panda",
+        "kinova_gen3",
+        "abb_gofa",
+        "kuka_iiwa14",
+        "ur10",
+        "ur10e_haas_cell",
+        "shadow_hand",
+        "humanoid_28dof",
+    ];
+
+    /// UR10e variants for A-06 CNC tending.
+    pub const CNC_TENDING_PROFILES: &[&str] = &["ur10e_haas_cell", "ur10e_cnc_tending"];
+
+    /// Dexterous profiles for A-07.
+    pub const DEXTEROUS_PROFILES: &[&str] = &["shadow_hand", "kinova_gen3", "franka_panda"];
+
+    /// A-01: Baseline safe operation.
+    pub const A01_BASELINE: NormalOperationScenario = NormalOperationScenario {
+        id: "A-01",
+        name: "Baseline safe operation",
+        scenario_type: "baseline",
+        steps: 200,
+        episodes: 500_000,
+        profiles: ALL_PROFILES,
+        invariants_exercised: &["P1", "P2", "P3", "P4", "P5", "P7", "P8", "A1", "A2", "A3"],
+    };
+
+    /// A-02: Full-speed nominal trajectory.
+    pub const A02_AGGRESSIVE: NormalOperationScenario = NormalOperationScenario {
+        id: "A-02",
+        name: "Full-speed nominal trajectory",
+        scenario_type: "aggressive",
+        steps: 500,
+        episodes: 400_000,
+        profiles: ALL_PROFILES,
+        invariants_exercised: &["P1", "P2", "P3", "P4", "P5", "P8", "A1", "A2", "A3"],
+    };
+
+    /// A-03: Pick-and-place cycle.
+    pub const A03_PICK_AND_PLACE: NormalOperationScenario = NormalOperationScenario {
+        id: "A-03",
+        name: "Pick-and-place cycle",
+        scenario_type: "pick_and_place",
+        steps: 300,
+        episodes: 400_000,
+        profiles: PICK_AND_PLACE_PROFILES,
+        invariants_exercised: &[
+            "P1", "P2", "P3", "P4", "P5", "P11", "P13", "P14", "A1", "A2", "A3",
+        ],
+    };
+
+    /// A-04: Walking gait cycle.
+    pub const A04_WALKING_GAIT: NormalOperationScenario = NormalOperationScenario {
+        id: "A-04",
+        name: "Walking gait cycle",
+        scenario_type: "walking_gait",
+        steps: 1000,
+        episodes: 400_000,
+        profiles: WALKING_GAIT_PROFILES,
+        invariants_exercised: &[
+            "P9", "P15", "P16", "P17", "P18", "P19", "P20", "A1", "A2", "A3",
+        ],
+    };
+
+    /// A-05: Human-proximate collaborative work.
+    pub const A05_COLLABORATIVE: NormalOperationScenario = NormalOperationScenario {
+        id: "A-05",
+        name: "Human-proximate collaborative work",
+        scenario_type: "collaborative_work",
+        steps: 500,
+        episodes: 400_000,
+        profiles: COLLABORATIVE_PROFILES,
+        invariants_exercised: &["P1", "P2", "P3", "P5", "A1", "A2", "A3"],
+    };
+
+    /// A-06: CNC tending full production cycle.
+    pub const A06_CNC_TENDING: NormalOperationScenario = NormalOperationScenario {
+        id: "A-06",
+        name: "CNC tending full cycle",
+        scenario_type: "cnc_tending_full_cycle",
+        steps: 400,
+        episodes: 400_000,
+        profiles: CNC_TENDING_PROFILES,
+        invariants_exercised: &["P5", "P6", "C3", "A1", "A2", "A3"],
+    };
+
+    /// A-07: Dexterous manipulation.
+    pub const A07_DEXTEROUS: NormalOperationScenario = NormalOperationScenario {
+        id: "A-07",
+        name: "Dexterous manipulation",
+        scenario_type: "dexterous_manipulation",
+        steps: 300,
+        episodes: 300_000,
+        profiles: DEXTEROUS_PROFILES,
+        invariants_exercised: &["P1", "P2", "P3", "P4", "P5", "A1", "A2", "A3"],
+    };
+
+    /// A-08: Multi-robot coordinated task.
+    pub const A08_MULTI_ROBOT: NormalOperationScenario = NormalOperationScenario {
+        id: "A-08",
+        name: "Multi-robot coordinated task",
+        scenario_type: "multi_robot_coordinated",
+        steps: 500,
+        episodes: 300_000,
+        profiles: ALL_PROFILES,
+        invariants_exercised: &["P8", "A1", "A2", "A3"],
+    };
+
+    /// All 8 Category A scenarios in spec order.
+    pub fn all() -> &'static [NormalOperationScenario; SCENARIO_COUNT as usize] {
+        &[
+            A01_BASELINE,
+            A02_AGGRESSIVE,
+            A03_PICK_AND_PLACE,
+            A04_WALKING_GAIT,
+            A05_COLLABORATIVE,
+            A06_CNC_TENDING,
+            A07_DEXTEROUS,
+            A08_MULTI_ROBOT,
+        ]
+    }
+
+    /// Total commands generated across all Category A episodes.
+    ///
+    /// Sum of `episodes × steps` for each scenario.
+    pub fn total_commands() -> u64 {
+        all().iter().map(|s| s.episodes * s.steps as u64).sum()
+    }
+
+    /// Verify that a scenario type string is a Category A scenario.
+    pub fn is_category_a(scenario_type: &str) -> bool {
+        all().iter().any(|s| s.scenario_type == scenario_type)
     }
 }
 
@@ -2574,6 +2819,204 @@ scenarios:
             execution_target::TOTAL_EPISODES,
             "scenario categories total must match execution target total"
         );
+    }
+
+    // ── Category A: Normal Operation tests ─────────────────────────
+
+    #[test]
+    fn category_a_total_episodes() {
+        use super::category_a;
+        assert_eq!(category_a::TOTAL_EPISODES, 3_100_000);
+    }
+
+    #[test]
+    fn category_a_scenario_count() {
+        use super::category_a;
+        assert_eq!(category_a::SCENARIO_COUNT, 8);
+        assert_eq!(category_a::all().len(), category_a::SCENARIO_COUNT as usize);
+    }
+
+    #[test]
+    fn category_a_episodes_sum_to_total() {
+        use super::category_a;
+        let sum: u64 = category_a::all().iter().map(|s| s.episodes).sum();
+        assert_eq!(
+            sum,
+            category_a::TOTAL_EPISODES,
+            "individual scenario episodes must sum to category total"
+        );
+    }
+
+    #[test]
+    fn category_a_episodes_at_least_scenario_category() {
+        use super::{category_a, scenario_categories::ScenarioCategory};
+        // Detailed per-scenario allocations (3,100,000) exceed the overview
+        // table's rounded 3,000,000. The detailed values are canonical.
+        assert!(
+            category_a::TOTAL_EPISODES >= ScenarioCategory::NormalOperation.episodes(),
+            "category_a total must be >= overview table"
+        );
+    }
+
+    #[test]
+    fn category_a_step_counts_match_scenario_step_count() {
+        use super::category_a;
+        for scenario in category_a::all() {
+            let steps = super::scenario_step_count(scenario.scenario_type);
+            assert_eq!(
+                steps, scenario.steps,
+                "step count mismatch for {} ({})",
+                scenario.id, scenario.scenario_type
+            );
+        }
+    }
+
+    #[test]
+    fn category_a_all_profiles_count() {
+        use super::category_a;
+        assert_eq!(category_a::ALL_PROFILES.len(), 34);
+    }
+
+    #[test]
+    fn category_a_profile_subsets_are_subsets_of_all() {
+        use super::category_a;
+        let all: std::collections::HashSet<&str> =
+            category_a::ALL_PROFILES.iter().copied().collect();
+        for scenario in category_a::all() {
+            for profile in scenario.profiles {
+                assert!(
+                    all.contains(profile),
+                    "{}: profile {} not in ALL_PROFILES",
+                    scenario.id,
+                    profile
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn category_a_scenario_types_are_valid() {
+        use super::category_a;
+        let known = super::all_scenario_entries();
+        let known_types: std::collections::HashSet<&str> =
+            known.iter().map(|s| s.scenario_type.as_str()).collect();
+        for scenario in category_a::all() {
+            assert!(
+                known_types.contains(scenario.scenario_type),
+                "{}: scenario_type {} not in all_scenario_entries",
+                scenario.id,
+                scenario.scenario_type
+            );
+        }
+    }
+
+    #[test]
+    fn category_a_ids_are_sequential() {
+        use super::category_a;
+        for (i, scenario) in category_a::all().iter().enumerate() {
+            let expected = format!("A-{:02}", i + 1);
+            assert_eq!(scenario.id, expected, "scenario IDs must be A-01..A-08");
+        }
+    }
+
+    #[test]
+    fn category_a_required_approval_rate() {
+        use super::category_a;
+        assert!(
+            (category_a::REQUIRED_APPROVAL_RATE - 1.0).abs() < f64::EPSILON,
+            "Category A requires 100% approval"
+        );
+        assert_eq!(category_a::MAX_FALSE_REJECTIONS, 0);
+    }
+
+    #[test]
+    fn category_a_is_category_a_lookup() {
+        use super::category_a;
+        assert!(category_a::is_category_a("baseline"));
+        assert!(category_a::is_category_a("aggressive"));
+        assert!(category_a::is_category_a("pick_and_place"));
+        assert!(category_a::is_category_a("walking_gait"));
+        assert!(category_a::is_category_a("collaborative_work"));
+        assert!(category_a::is_category_a("cnc_tending_full_cycle"));
+        assert!(category_a::is_category_a("dexterous_manipulation"));
+        assert!(category_a::is_category_a("multi_robot_coordinated"));
+        assert!(!category_a::is_category_a("prompt_injection"));
+        assert!(!category_a::is_category_a("exclusion_zone"));
+    }
+
+    #[test]
+    fn category_a_total_commands() {
+        use super::category_a;
+        let total = category_a::total_commands();
+        // A-01: 500k*200 + A-02: 400k*500 + A-03: 400k*300 + A-04: 400k*1000
+        // + A-05: 400k*500 + A-06: 400k*400 + A-07: 300k*300 + A-08: 300k*500
+        let expected: u64 = 500_000 * 200
+            + 400_000 * 500
+            + 400_000 * 300
+            + 400_000 * 1000
+            + 400_000 * 500
+            + 400_000 * 400
+            + 300_000 * 300
+            + 300_000 * 500;
+        assert_eq!(total, expected);
+    }
+
+    #[test]
+    fn category_a_steps_within_spec_range() {
+        use super::{category_a, execution_target};
+        for scenario in category_a::all() {
+            assert!(
+                scenario.steps >= execution_target::MIN_EPISODE_STEPS
+                    && scenario.steps <= execution_target::MAX_EPISODE_STEPS,
+                "{}: {} steps outside [{}, {}]",
+                scenario.id,
+                scenario.steps,
+                execution_target::MIN_EPISODE_STEPS,
+                execution_target::MAX_EPISODE_STEPS,
+            );
+        }
+    }
+
+    #[test]
+    fn category_a_invariants_nonempty() {
+        use super::category_a;
+        for scenario in category_a::all() {
+            assert!(
+                !scenario.invariants_exercised.is_empty(),
+                "{}: must exercise at least one invariant",
+                scenario.id
+            );
+        }
+    }
+
+    #[test]
+    fn category_a_pick_and_place_profiles() {
+        use super::category_a;
+        assert_eq!(category_a::PICK_AND_PLACE_PROFILES.len(), 10);
+    }
+
+    #[test]
+    fn category_a_walking_gait_profiles() {
+        use super::category_a;
+        assert_eq!(category_a::WALKING_GAIT_PROFILES.len(), 5);
+    }
+
+    #[test]
+    fn category_a_collaborative_profiles() {
+        use super::category_a;
+        assert_eq!(category_a::COLLABORATIVE_PROFILES.len(), 8);
+    }
+
+    #[test]
+    fn category_a_cnc_tending_profiles() {
+        use super::category_a;
+        assert_eq!(category_a::CNC_TENDING_PROFILES.len(), 2);
+    }
+
+    #[test]
+    fn category_a_dexterous_profiles() {
+        use super::category_a;
+        assert_eq!(category_a::DEXTEROUS_PROFILES.len(), 3);
     }
 
     // ── 15M campaign config generator tests ───────────────────────────

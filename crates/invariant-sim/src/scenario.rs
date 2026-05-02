@@ -918,23 +918,26 @@ impl<'a> ScenarioGenerator<'a> {
                         i as f64 * delta_time * 1_000.0,
                     ));
 
-                let (ee_pos, zone_active) = if i < quarter {
-                    // Phase 1: Approach — safe position, zone active.
-                    (safe_pos, true)
+                let (ee_pos, override_zone_off) = if i < quarter {
+                    // Phase 1: Approach — safe position, no zone override.
+                    (safe_pos, false)
                 } else if i < quarter * 2 {
-                    // Phase 2: Loading — EE inside conditional zone, zone disabled.
-                    (conditional_zone_point.unwrap_or(safe_pos), false)
+                    // Phase 2: Loading — EE inside conditional zone, zone disabled via override.
+                    (conditional_zone_point.unwrap_or(safe_pos), true)
                 } else if i < quarter * 3 {
-                    // Phase 3: Cutting — safe position, zone active.
-                    (safe_pos, true)
+                    // Phase 3: Cutting — safe position, no zone override.
+                    (safe_pos, false)
                 } else {
-                    // Phase 4: Retract — safe position, zone active.
-                    (safe_pos, true)
+                    // Phase 4: Retract — safe position, no zone override.
+                    (safe_pos, false)
                 };
 
                 let mut zone_overrides = HashMap::new();
-                if let Some(ref zone_name) = conditional_zone_name {
-                    zone_overrides.insert(zone_name.clone(), zone_active);
+                if override_zone_off {
+                    if let Some(ref zone_name) = conditional_zone_name {
+                        // false = zone disabled, allowing EE inside the conditional zone.
+                        zone_overrides.insert(zone_name.clone(), false);
+                    }
                 }
 
                 let mut ee_positions = vec![EndEffectorPosition {
