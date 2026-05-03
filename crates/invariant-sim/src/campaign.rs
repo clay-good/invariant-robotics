@@ -609,7 +609,7 @@ pub mod data_outputs {
     /// Incrementally builds a [`VerdictChain`] as steps are validated.
     ///
     /// One `VerdictChainBuilder` is created per episode and receives one
-    /// verdict per step.  After all steps have been recorded, [`finalize`]
+    /// verdict per step.  After all steps have been recorded, [`VerdictChainBuilder::finalize`]
     /// consumes the builder and returns the complete, verifiable chain.
     ///
     /// # Examples
