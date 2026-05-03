@@ -117,6 +117,10 @@ pub enum ScenarioType {
     LongRunningStability,
     /// L-04: Extended episode with mixed threat patterns for scorer stability.
     LongRunningThreat,
+    /// A-05: Human-proximate collaborative work with proximity-scaled velocity.
+    HumanProximate,
+    /// A-06: CNC tending full cycle — all commands safe (zone overrides synchronized).
+    NominalCncTending,
 }
 
 // ---------------------------------------------------------------------------
@@ -174,9 +178,7 @@ impl<'a> ScenarioGenerator<'a> {
             ScenarioType::Aggressive => self.aggressive(count, pca_chain_b64, ops),
             ScenarioType::PickAndPlace => self.pick_and_place(count, pca_chain_b64, ops),
             ScenarioType::WalkingGait => self.walking_gait(count, pca_chain_b64, ops),
-            ScenarioType::CollaborativeWork => {
-                self.collaborative_work(count, pca_chain_b64, ops)
-            }
+            ScenarioType::CollaborativeWork => self.collaborative_work(count, pca_chain_b64, ops),
             ScenarioType::CncTendingFullCycle => {
                 self.cnc_tending_full_cycle(count, pca_chain_b64, ops)
             }
@@ -218,6 +220,10 @@ impl<'a> ScenarioGenerator<'a> {
                 self.long_running_stability(count, pca_chain_b64, ops)
             }
             ScenarioType::LongRunningThreat => self.long_running_threat(count, pca_chain_b64, ops),
+            ScenarioType::HumanProximate => self.collaborative_work(count, pca_chain_b64, ops),
+            ScenarioType::NominalCncTending => {
+                self.cnc_tending_full_cycle(count, pca_chain_b64, ops)
+            }
         }
     }
 
@@ -609,12 +615,7 @@ impl<'a> ScenarioGenerator<'a> {
     /// A-03: Pick-and-place cycle — approach, grasp, lift, transport, place,
     /// retract. All commands stay within joint/workspace limits. 6 phases
     /// distributed evenly across `count` steps.
-    fn pick_and_place(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
+    fn pick_and_place(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
         let base_ts: DateTime<Utc> = Utc::now();
         let delta_time = self.profile.max_delta_time * 0.5;
         let meta_template = Self::metadata_template(self.scenario);
@@ -692,12 +693,7 @@ impl<'a> ScenarioGenerator<'a> {
 
     /// A-04: Walking gait cycle — alternating stance/swing phases at safe
     /// velocity. All locomotion parameters stay within profile limits.
-    fn walking_gait(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
+    fn walking_gait(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
         let base_ts: DateTime<Utc> = Utc::now();
         let delta_time = self.profile.max_delta_time * 0.5;
         let meta_template = Self::metadata_template(self.scenario);
@@ -713,7 +709,9 @@ impl<'a> ScenarioGenerator<'a> {
         let max_step_height = loco_cfg.map(|l| l.max_step_height).unwrap_or(0.5);
         let max_heading = loco_cfg.map(|l| l.max_heading_rate).unwrap_or(1.0);
         let friction = loco_cfg.map(|l| l.friction_coefficient).unwrap_or(0.6);
-        let max_grf = loco_cfg.map(|l| l.max_ground_reaction_force).unwrap_or(1000.0);
+        let max_grf = loco_cfg
+            .map(|l| l.max_ground_reaction_force)
+            .unwrap_or(1000.0);
 
         // Safe clearance midpoint between min and max step height.
         let swing_clearance = (min_clearance + max_step_height) / 2.0;
