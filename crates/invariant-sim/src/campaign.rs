@@ -2282,7 +2282,7 @@ struct ProfileAllocation {
     is_arm_or_hand: bool,
 }
 
-/// All 22 scenario types with their category weight.
+/// All 30 scenario types with their category weight.
 fn all_scenario_entries() -> Vec<ScenarioConfig> {
     let entries = [
         // A: Normal operation
@@ -2297,6 +2297,14 @@ fn all_scenario_entries() -> Vec<ScenarioConfig> {
         ("dexterous_manipulation", 1.0),
         ("multi_robot_coordinated", 1.0),
         // B: Joint safety
+        ("joint_position_boundary", 1.5),
+        ("joint_velocity_boundary", 1.5),
+        ("joint_torque_boundary", 1.5),
+        ("joint_acceleration_ramp", 1.5),
+        ("joint_coordinated_violation", 1.0),
+        ("joint_direction_reversal", 1.0),
+        ("joint_ieee754_special", 1.5),
+        ("joint_gradual_drift", 1.5),
         ("prompt_injection", 2.0),
         // C: Spatial safety
         ("exclusion_zone", 1.5),
@@ -3280,6 +3288,29 @@ scenarios:
         assert_eq!(super::scenario_step_count("authority_escalation"), 200);
         assert_eq!(super::scenario_step_count("chain_forgery"), 200);
         assert_eq!(super::scenario_step_count("locomotion_runaway"), 200);
+        // Joint safety scenarios are 200 steps
+        assert_eq!(super::scenario_step_count("joint_position_boundary"), 200);
+        assert_eq!(super::scenario_step_count("joint_velocity_boundary"), 200);
+        assert_eq!(super::scenario_step_count("joint_torque_boundary"), 200);
+        assert_eq!(super::scenario_step_count("joint_acceleration_ramp"), 200);
+        assert_eq!(
+            super::scenario_step_count("joint_coordinated_violation"),
+            200
+        );
+        assert_eq!(super::scenario_step_count("joint_direction_reversal"), 200);
+        assert_eq!(super::scenario_step_count("joint_ieee754_special"), 200);
+        assert_eq!(super::scenario_step_count("joint_gradual_drift"), 200);
+    }
+
+    #[test]
+    fn scenario_step_count_category_a_varied() {
+        assert_eq!(super::scenario_step_count("aggressive"), 500);
+        assert_eq!(super::scenario_step_count("collaborative_work"), 500);
+        assert_eq!(super::scenario_step_count("multi_robot_coordinated"), 500);
+        assert_eq!(super::scenario_step_count("cnc_tending_full_cycle"), 400);
+        assert_eq!(super::scenario_step_count("pick_and_place"), 300);
+        assert_eq!(super::scenario_step_count("dexterous_manipulation"), 300);
+        assert_eq!(super::scenario_step_count("walking_gait"), 1000);
     }
 
     #[test]
