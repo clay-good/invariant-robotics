@@ -1,4 +1,4 @@
-// Built-in simulation scenarios (7 types).
+// Built-in simulation scenarios.
 //
 // Each `ScenarioType` produces a deterministic sequence of `Command` values
 // designed to exercise a specific failure mode (or the happy path) of the
@@ -9,8 +9,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Duration, Utc};
 use invariant_core::models::authority::Operation;
 use invariant_core::models::command::{
-    Command, CommandAuthority, EndEffectorForce, EndEffectorPosition, FootState, JointState,
-    LocomotionState,
+    Command, CommandAuthority, EndEffectorPosition, FootState, JointState, LocomotionState,
 };
 use invariant_core::models::profile::{ExclusionZone, RobotProfile, WorkspaceBounds};
 use serde::{Deserialize, Serialize};
@@ -19,7 +18,7 @@ use serde::{Deserialize, Serialize};
 // ScenarioType
 // ---------------------------------------------------------------------------
 
-/// The twelve built-in scenario classes.
+/// Built-in scenario classes for the 15M campaign.
 ///
 /// # Examples
 ///
@@ -50,10 +49,23 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScenarioType {
-    /// Normal operation: all joint states and positions stay within limits.
+    // -- Category A: Normal operation (all commands should be APPROVED) --
+    /// A-01: Normal operation: all joint states and positions stay within limits.
     Baseline,
-    /// Boundary stress: commands at 95–100 % of every limit.
+    /// A-02: Full-speed nominal trajectory at 95–100 % of every limit.
     Aggressive,
+    /// A-03: Pick-and-place cycle with approach/grasp/lift/place phases.
+    PickAndPlace,
+    /// A-04: Walking gait cycle with alternating stance/swing phases.
+    WalkingGait,
+    /// A-05: Human-proximate collaborative work with proximity-zone derating.
+    CollaborativeWork,
+    /// A-06: CNC tending full production cycle (safe; all commands should pass).
+    CncTendingFullCycle,
+    /// A-07: Dexterous manipulation with varied finger articulation.
+    DexterousManipulation,
+    /// A-08: Multi-robot coordinated task with paired profiles.
+    MultiRobotCoordinated,
     /// Spatial violation: end-effector positions placed inside exclusion zones.
     ExclusionZone,
     /// Authority failure: valid physics but empty `pca_chain` triggers rejection.
@@ -105,19 +117,10 @@ pub enum ScenarioType {
     LongRunningStability,
     /// L-04: Extended episode with mixed threat patterns for scorer stability.
     LongRunningThreat,
-    // -- Category A: Normal Operation (additional scenarios) --
-    /// A-03: Pick-and-place cycle with safe approach, grasp, lift, move, place phases.
-    PickAndPlace,
-    /// A-04: Walking gait cycle with valid locomotion state within P15-P20 limits.
-    WalkingGait,
     /// A-05: Human-proximate collaborative work with proximity-scaled velocity.
     HumanProximate,
     /// A-06: CNC tending full cycle — all commands safe (zone overrides synchronized).
     NominalCncTending,
-    /// A-07: Dexterous manipulation with fine-grained joint movements within limits.
-    DexterousManipulation,
-    /// A-08: Multi-robot coordinated task with alternating valid sources.
-    MultiRobotCoordinated,
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +176,18 @@ impl<'a> ScenarioGenerator<'a> {
         match self.scenario {
             ScenarioType::Baseline => self.baseline(count, pca_chain_b64, ops),
             ScenarioType::Aggressive => self.aggressive(count, pca_chain_b64, ops),
+            ScenarioType::PickAndPlace => self.pick_and_place(count, pca_chain_b64, ops),
+            ScenarioType::WalkingGait => self.walking_gait(count, pca_chain_b64, ops),
+            ScenarioType::CollaborativeWork => self.collaborative_work(count, pca_chain_b64, ops),
+            ScenarioType::CncTendingFullCycle => {
+                self.cnc_tending_full_cycle(count, pca_chain_b64, ops)
+            }
+            ScenarioType::DexterousManipulation => {
+                self.dexterous_manipulation(count, pca_chain_b64, ops)
+            }
+            ScenarioType::MultiRobotCoordinated => {
+                self.multi_robot_coordinated(count, pca_chain_b64, ops)
+            }
             ScenarioType::ExclusionZone => self.exclusion_zone(count, pca_chain_b64, ops),
             ScenarioType::AuthorityEscalation => self.authority_escalation(count, ops),
             ScenarioType::ChainForgery => self.chain_forgery(count, ops),
@@ -205,15 +220,9 @@ impl<'a> ScenarioGenerator<'a> {
                 self.long_running_stability(count, pca_chain_b64, ops)
             }
             ScenarioType::LongRunningThreat => self.long_running_threat(count, pca_chain_b64, ops),
-            ScenarioType::PickAndPlace => self.pick_and_place(count, pca_chain_b64, ops),
-            ScenarioType::WalkingGait => self.walking_gait(count, pca_chain_b64, ops),
-            ScenarioType::HumanProximate => self.human_proximate(count, pca_chain_b64, ops),
-            ScenarioType::NominalCncTending => self.nominal_cnc_tending(count, pca_chain_b64, ops),
-            ScenarioType::DexterousManipulation => {
-                self.dexterous_manipulation(count, pca_chain_b64, ops)
-            }
-            ScenarioType::MultiRobotCoordinated => {
-                self.multi_robot_coordinated(count, pca_chain_b64, ops)
+            ScenarioType::HumanProximate => self.collaborative_work(count, pca_chain_b64, ops),
+            ScenarioType::NominalCncTending => {
+                self.cnc_tending_full_cycle(count, pca_chain_b64, ops)
             }
         }
     }
@@ -587,6 +596,497 @@ impl<'a> ScenarioGenerator<'a> {
                     source: "aggressive_agent".to_owned(),
                     sequence: i as u64,
                     joint_states: self.aggressive_joint_states(i, prox_scale),
+                    delta_time,
+                    end_effector_positions: end_effector_positions.clone(),
+                    center_of_mass: Self::valid_com(self.profile),
+                    authority: authority.clone(),
+                    metadata: Self::metadata_stamp(&meta_template, i),
+                    locomotion_state: None,
+                    end_effector_forces: vec![],
+                    estimated_payload_kg: None,
+                    signed_sensor_readings: vec![],
+                    zone_overrides: HashMap::new(),
+                    environment_state: None,
+                }
+            })
+            .collect()
+    }
+
+    /// A-03: Pick-and-place cycle — approach, grasp, lift, transport, place,
+    /// retract. All commands stay within joint/workspace limits. 6 phases
+    /// distributed evenly across `count` steps.
+    fn pick_and_place(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
+        let base_ts: DateTime<Utc> = Utc::now();
+        let delta_time = self.profile.max_delta_time * 0.5;
+        let meta_template = Self::metadata_template(self.scenario);
+        let authority = Self::authority(pca_chain_b64, ops);
+        let source = "pick_and_place_agent".to_owned();
+        let end_effector_positions = Self::safe_end_effectors(self.profile);
+
+        // Interpolate joint positions between midpoint (rest) and 70% of range
+        // (extended) to simulate a smooth pick-and-place trajectory.
+        let rest_joints = self.baseline_joint_states();
+        let extended_joints: Vec<JointState> = self
+            .profile
+            .joints
+            .iter()
+            .map(|j| {
+                let range = j.max - j.min;
+                JointState {
+                    name: j.name.clone(),
+                    position: j.min + range * 0.7,
+                    velocity: 0.0,
+                    effort: 0.0,
+                }
+            })
+            .collect();
+
+        (0..count)
+            .map(|i| {
+                let timestamp = base_ts
+                    + Duration::milliseconds(Self::ms_offset_to_i64(
+                        i as f64 * delta_time * 1_000.0,
+                    ));
+                // 6 phases: approach, grasp, lift, transport, place, retract.
+                // Sinusoidal interpolation between rest and extended.
+                let phase = (i as f64 / count.max(1) as f64) * std::f64::consts::TAU;
+                let blend = (phase.sin() + 1.0) / 2.0; // 0..1
+
+                let joint_states: Vec<JointState> = rest_joints
+                    .iter()
+                    .zip(extended_joints.iter())
+                    .zip(self.profile.joints.iter())
+                    .map(|((rest, ext), jdef)| {
+                        let pos = rest.position + (ext.position - rest.position) * blend;
+                        // Velocity proportional to position change rate, within limits.
+                        let max_vel = jdef.max_velocity * self.profile.global_velocity_scale * 0.5;
+                        let vel = max_vel * (phase.cos()).abs();
+                        JointState {
+                            name: rest.name.clone(),
+                            position: pos,
+                            velocity: vel,
+                            effort: jdef.max_torque * 0.3,
+                        }
+                    })
+                    .collect();
+
+                Command {
+                    timestamp,
+                    source: source.clone(),
+                    sequence: i as u64,
+                    joint_states,
+                    delta_time,
+                    end_effector_positions: end_effector_positions.clone(),
+                    center_of_mass: Self::valid_com(self.profile),
+                    authority: authority.clone(),
+                    metadata: Self::metadata_stamp(&meta_template, i),
+                    locomotion_state: None,
+                    end_effector_forces: vec![],
+                    estimated_payload_kg: Some(1.0), // light payload
+                    signed_sensor_readings: vec![],
+                    zone_overrides: HashMap::new(),
+                    environment_state: None,
+                }
+            })
+            .collect()
+    }
+
+    /// A-04: Walking gait cycle — alternating stance/swing phases at safe
+    /// velocity. All locomotion parameters stay within profile limits.
+    fn walking_gait(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
+        let base_ts: DateTime<Utc> = Utc::now();
+        let delta_time = self.profile.max_delta_time * 0.5;
+        let meta_template = Self::metadata_template(self.scenario);
+        let authority = Self::authority(pca_chain_b64, ops);
+        let source = "walking_gait_agent".to_owned();
+        let joint_states = self.baseline_joint_states();
+        let end_effector_positions = Self::safe_end_effectors(self.profile);
+
+        let loco_cfg = self.profile.locomotion.as_ref();
+        let max_vel = loco_cfg.map(|l| l.max_locomotion_velocity).unwrap_or(1.5);
+        let max_step = loco_cfg.map(|l| l.max_step_length).unwrap_or(0.4);
+        let min_clearance = loco_cfg.map(|l| l.min_foot_clearance).unwrap_or(0.02);
+        let max_step_height = loco_cfg.map(|l| l.max_step_height).unwrap_or(0.5);
+        let max_heading = loco_cfg.map(|l| l.max_heading_rate).unwrap_or(1.0);
+        let friction = loco_cfg.map(|l| l.friction_coefficient).unwrap_or(0.6);
+        let max_grf = loco_cfg
+            .map(|l| l.max_ground_reaction_force)
+            .unwrap_or(1000.0);
+
+        // Safe clearance midpoint between min and max step height.
+        let swing_clearance = (min_clearance + max_step_height) / 2.0;
+
+        (0..count)
+            .map(|i| {
+                let timestamp = base_ts
+                    + Duration::milliseconds(Self::ms_offset_to_i64(
+                        i as f64 * delta_time * 1_000.0,
+                    ));
+
+                // Gait phase: alternating left/right stance at 50% of max velocity.
+                let phase = (i as f64 / count.max(1) as f64) * std::f64::consts::TAU * 4.0;
+                let left_swing = phase.sin() > 0.0;
+
+                // Safe normal force well within GRF and friction limits.
+                let normal_force = max_grf * 0.5;
+                let tangential = normal_force * friction * 0.3;
+
+                let feet = vec![
+                    FootState {
+                        name: "left_foot".into(),
+                        position: [-0.15, 0.1, if left_swing { swing_clearance } else { 0.0 }],
+                        contact: !left_swing,
+                        ground_reaction_force: if left_swing {
+                            None
+                        } else {
+                            Some([tangential, 0.0, normal_force])
+                        },
+                    },
+                    FootState {
+                        name: "right_foot".into(),
+                        position: [0.15, -0.1, if left_swing { 0.0 } else { swing_clearance }],
+                        contact: left_swing,
+                        ground_reaction_force: if left_swing {
+                            Some([tangential, 0.0, normal_force])
+                        } else {
+                            None
+                        },
+                    },
+                ];
+
+                let loco = LocomotionState {
+                    base_velocity: [max_vel * 0.5, 0.0, 0.0],
+                    heading_rate: max_heading * 0.1,
+                    feet,
+                    step_length: max_step * 0.6,
+                };
+
+                Command {
+                    timestamp,
+                    source: source.clone(),
+                    sequence: i as u64,
+                    joint_states: joint_states.clone(),
+                    delta_time,
+                    end_effector_positions: end_effector_positions.clone(),
+                    center_of_mass: Self::valid_com(self.profile),
+                    authority: authority.clone(),
+                    metadata: Self::metadata_stamp(&meta_template, i),
+                    locomotion_state: Some(loco),
+                    end_effector_forces: vec![],
+                    estimated_payload_kg: None,
+                    signed_sensor_readings: vec![],
+                    zone_overrides: HashMap::new(),
+                    environment_state: None,
+                }
+            })
+            .collect()
+    }
+
+    /// A-05: Human-proximate collaborative work — commands inside proximity
+    /// zones with velocity properly derated. All should be approved.
+    fn collaborative_work(
+        &self,
+        count: usize,
+        pca_chain_b64: &str,
+        ops: &[Operation],
+    ) -> Vec<Command> {
+        let base_ts: DateTime<Utc> = Utc::now();
+        let delta_time = self.profile.max_delta_time * 0.5;
+        let meta_template = Self::metadata_template(self.scenario);
+        let authority = Self::authority(pca_chain_b64, ops);
+        let source = "collaborative_work_agent".to_owned();
+        let end_effector_positions = Self::safe_end_effectors(self.profile);
+
+        // Compute the proximity scale at the EE position so velocities
+        // respect the proximity derating.
+        let ee_pos = end_effector_positions
+            .first()
+            .map(|ee| ee.position)
+            .unwrap_or([0.0; 3]);
+        let prox_scale = Self::proximity_scale_at(self.profile, ee_pos);
+
+        let margins = self.profile.real_world_margins.as_ref();
+        let vel_margin = margins.map(|m| m.velocity_margin).unwrap_or(0.0);
+        let torque_margin = margins.map(|m| m.torque_margin).unwrap_or(0.0);
+
+        (0..count)
+            .map(|i| {
+                let timestamp = base_ts
+                    + Duration::milliseconds(Self::ms_offset_to_i64(
+                        i as f64 * delta_time * 1_000.0,
+                    ));
+
+                // Conservative joint states at 50% of effective limits.
+                let joint_states: Vec<JointState> = self
+                    .profile
+                    .joints
+                    .iter()
+                    .map(|j| {
+                        let mid = Self::joint_mid(j.min, j.max);
+                        let eff_vel = j.max_velocity
+                            * self.profile.global_velocity_scale
+                            * (1.0 - vel_margin)
+                            * prox_scale;
+                        let eff_torque = j.max_torque * (1.0 - torque_margin);
+                        JointState {
+                            name: j.name.clone(),
+                            position: mid,
+                            velocity: eff_vel * 0.5,
+                            effort: eff_torque * 0.3,
+                        }
+                    })
+                    .collect();
+
+                Command {
+                    timestamp,
+                    source: source.clone(),
+                    sequence: i as u64,
+                    joint_states,
+                    delta_time,
+                    end_effector_positions: end_effector_positions.clone(),
+                    center_of_mass: Self::valid_com(self.profile),
+                    authority: authority.clone(),
+                    metadata: Self::metadata_stamp(&meta_template, i),
+                    locomotion_state: None,
+                    end_effector_forces: vec![],
+                    estimated_payload_kg: None,
+                    signed_sensor_readings: vec![],
+                    zone_overrides: HashMap::new(),
+                    environment_state: None,
+                }
+            })
+            .collect()
+    }
+
+    /// A-06: CNC tending full production cycle — safe version where the zone
+    /// override correctly disables the conditional exclusion zone during
+    /// loading and uses a safe position during cutting. All commands should pass.
+    fn cnc_tending_full_cycle(
+        &self,
+        count: usize,
+        pca_chain_b64: &str,
+        ops: &[Operation],
+    ) -> Vec<Command> {
+        let base_ts: DateTime<Utc> = Utc::now();
+        let delta_time = self.profile.max_delta_time * 0.5;
+        let meta_template = Self::metadata_template(self.scenario);
+        let authority = Self::authority(pca_chain_b64, ops);
+        let source = "cnc_full_cycle_agent".to_owned();
+        let joint_states = self.baseline_joint_states();
+        let safe_pos = Self::safe_end_effector(self.profile);
+
+        // Find the first conditional exclusion zone and a point inside it.
+        let conditional_zone_point: Option<[f64; 3]> = self
+            .profile
+            .exclusion_zones
+            .iter()
+            .find(|z| match z {
+                ExclusionZone::Aabb { conditional, .. } => *conditional,
+                ExclusionZone::Sphere { conditional, .. } => *conditional,
+                _ => false,
+            })
+            .and_then(point_inside_exclusion_zone);
+
+        let conditional_zone_name: Option<String> = self
+            .profile
+            .exclusion_zones
+            .iter()
+            .find(|z| match z {
+                ExclusionZone::Aabb { conditional, .. } => *conditional,
+                ExclusionZone::Sphere { conditional, .. } => *conditional,
+                _ => false,
+            })
+            .map(|z| match z {
+                ExclusionZone::Aabb { name, .. } => name.clone(),
+                ExclusionZone::Sphere { name, .. } => name.clone(),
+                _ => String::new(),
+            });
+
+        let mut extra_ee = Self::safe_end_effectors(self.profile);
+        extra_ee.retain(|ee| ee.name != "end_effector");
+
+        // 4 phases: approach (safe), load (zone disabled, EE inside),
+        // cutting (zone active, EE safe), retract (safe).
+        let quarter = count / 4;
+
+        (0..count)
+            .map(|i| {
+                let timestamp = base_ts
+                    + Duration::milliseconds(Self::ms_offset_to_i64(
+                        i as f64 * delta_time * 1_000.0,
+                    ));
+
+                let (ee_pos, override_zone_off) = if i < quarter {
+                    // Phase 1: Approach — safe position, no zone override.
+                    (safe_pos, false)
+                } else if i < quarter * 2 {
+                    // Phase 2: Loading — EE inside conditional zone, zone disabled via override.
+                    (conditional_zone_point.unwrap_or(safe_pos), true)
+                } else if i < quarter * 3 {
+                    // Phase 3: Cutting — safe position, no zone override.
+                    (safe_pos, false)
+                } else {
+                    // Phase 4: Retract — safe position, no zone override.
+                    (safe_pos, false)
+                };
+
+                let mut zone_overrides = HashMap::new();
+                if override_zone_off {
+                    if let Some(ref zone_name) = conditional_zone_name {
+                        // false = zone disabled, allowing EE inside the conditional zone.
+                        zone_overrides.insert(zone_name.clone(), false);
+                    }
+                }
+
+                let mut ee_positions = vec![EndEffectorPosition {
+                    name: "gripper".to_owned(),
+                    position: ee_pos,
+                }];
+                ee_positions.extend(extra_ee.clone());
+
+                Command {
+                    timestamp,
+                    source: source.clone(),
+                    sequence: i as u64,
+                    joint_states: joint_states.clone(),
+                    delta_time,
+                    end_effector_positions: ee_positions,
+                    center_of_mass: Self::valid_com(self.profile),
+                    authority: authority.clone(),
+                    metadata: Self::metadata_stamp(&meta_template, i),
+                    locomotion_state: None,
+                    end_effector_forces: vec![],
+                    estimated_payload_kg: None,
+                    signed_sensor_readings: vec![],
+                    zone_overrides,
+                    environment_state: None,
+                }
+            })
+            .collect()
+    }
+
+    /// A-07: Dexterous manipulation — varied finger articulation across the
+    /// full joint range using sinusoidal sweeps. All within limits.
+    fn dexterous_manipulation(
+        &self,
+        count: usize,
+        pca_chain_b64: &str,
+        ops: &[Operation],
+    ) -> Vec<Command> {
+        let base_ts: DateTime<Utc> = Utc::now();
+        let delta_time = self.profile.max_delta_time * 0.5;
+        let meta_template = Self::metadata_template(self.scenario);
+        let authority = Self::authority(pca_chain_b64, ops);
+        let source = "dexterous_manipulation_agent".to_owned();
+        let end_effector_positions = Self::safe_end_effectors(self.profile);
+
+        let margins = self.profile.real_world_margins.as_ref();
+        let pos_margin = margins.map(|m| m.position_margin).unwrap_or(0.0);
+        let vel_margin = margins.map(|m| m.velocity_margin).unwrap_or(0.0);
+        let torque_margin = margins.map(|m| m.torque_margin).unwrap_or(0.0);
+
+        let ee_pos = end_effector_positions
+            .first()
+            .map(|ee| ee.position)
+            .unwrap_or([0.0; 3]);
+        let prox_scale = Self::proximity_scale_at(self.profile, ee_pos);
+
+        (0..count)
+            .map(|i| {
+                let timestamp = base_ts
+                    + Duration::milliseconds(Self::ms_offset_to_i64(
+                        i as f64 * delta_time * 1_000.0,
+                    ));
+
+                // Each joint sweeps sinusoidally at a different frequency,
+                // staying within margin-tightened limits.
+                let joint_states: Vec<JointState> = self
+                    .profile
+                    .joints
+                    .iter()
+                    .enumerate()
+                    .map(|(j, jdef)| {
+                        let range = jdef.max - jdef.min;
+                        let eff_min = jdef.min + range * pos_margin;
+                        let eff_max = jdef.max - range * pos_margin;
+                        let mid = (eff_min + eff_max) / 2.0;
+                        let half_range = (eff_max - eff_min) / 2.0;
+
+                        // Different frequency per joint for varied articulation.
+                        let freq = 1.0 + j as f64 * 0.3;
+                        let phase = i as f64 / count.max(1) as f64 * std::f64::consts::TAU * freq;
+                        let position = mid + half_range * 0.85 * phase.sin();
+
+                        let eff_vel = jdef.max_velocity
+                            * self.profile.global_velocity_scale
+                            * (1.0 - vel_margin)
+                            * prox_scale;
+                        let velocity = eff_vel * 0.7 * phase.cos().abs();
+
+                        let eff_torque = jdef.max_torque * (1.0 - torque_margin);
+                        let effort = eff_torque * 0.4;
+
+                        JointState {
+                            name: jdef.name.clone(),
+                            position,
+                            velocity,
+                            effort,
+                        }
+                    })
+                    .collect();
+
+                Command {
+                    timestamp,
+                    source: source.clone(),
+                    sequence: i as u64,
+                    joint_states,
+                    delta_time,
+                    end_effector_positions: end_effector_positions.clone(),
+                    center_of_mass: Self::valid_com(self.profile),
+                    authority: authority.clone(),
+                    metadata: Self::metadata_stamp(&meta_template, i),
+                    locomotion_state: None,
+                    end_effector_forces: vec![],
+                    estimated_payload_kg: None,
+                    signed_sensor_readings: vec![],
+                    zone_overrides: HashMap::new(),
+                    environment_state: None,
+                }
+            })
+            .collect()
+    }
+
+    /// A-08: Multi-robot coordinated task — two agents issue interleaved
+    /// commands with proper monotonic sequencing. All should be approved.
+    fn multi_robot_coordinated(
+        &self,
+        count: usize,
+        pca_chain_b64: &str,
+        ops: &[Operation],
+    ) -> Vec<Command> {
+        let base_ts: DateTime<Utc> = Utc::now();
+        let delta_time = self.profile.max_delta_time * 0.5;
+        let meta_template = Self::metadata_template(self.scenario);
+        let authority = Self::authority(pca_chain_b64, ops);
+        let joint_states = self.baseline_joint_states();
+        let end_effector_positions = Self::safe_end_effectors(self.profile);
+
+        // Two coordinated agents with strictly monotonic global sequencing.
+        let sources = ["coord_agent_alpha", "coord_agent_beta"];
+
+        (0..count)
+            .map(|i| {
+                let timestamp = base_ts
+                    + Duration::milliseconds(Self::ms_offset_to_i64(
+                        i as f64 * delta_time * 1_000.0,
+                    ));
+                let source = sources[i % 2].to_owned();
+
+                Command {
+                    timestamp,
+                    source,
+                    sequence: i as u64,
+                    joint_states: joint_states.clone(),
                     delta_time,
                     end_effector_positions: end_effector_positions.clone(),
                     center_of_mass: Self::valid_com(self.profile),
@@ -1943,544 +2443,6 @@ impl<'a> ScenarioGenerator<'a> {
             })
             .collect()
     }
-
-    // -----------------------------------------------------------------------
-    // Category A: Normal Operation (additional scenarios A-03 through A-08)
-    // -----------------------------------------------------------------------
-
-    /// A-03: Pick-and-place cycle. Alternates between approach, grasp, lift,
-    /// move, and place phases — all within safe limits.
-    fn pick_and_place(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
-        let base_ts: DateTime<Utc> = Utc::now();
-        let delta_time = self.profile.max_delta_time * 0.5;
-        let meta_template = Self::metadata_template(self.scenario);
-        let authority = Self::authority(pca_chain_b64, ops);
-        let source = "pick_and_place_agent".to_owned();
-        let ee_positions = Self::safe_end_effectors(self.profile);
-
-        // Compute safe force magnitudes from the first end-effector in the profile.
-        let safe_grasp = self
-            .profile
-            .end_effectors
-            .first()
-            .map(|ee| {
-                let min = ee.min_grasp_force_n;
-                let max = ee.max_grasp_force_n;
-                (min + max) / 2.0
-            })
-            .unwrap_or(5.0);
-        let safe_force = self
-            .profile
-            .end_effectors
-            .first()
-            .map(|ee| ee.max_force_n * 0.5)
-            .unwrap_or(10.0);
-        let safe_payload = self
-            .profile
-            .end_effectors
-            .first()
-            .map(|ee| ee.max_payload_kg * 0.5)
-            .unwrap_or(1.0);
-
-        (0..count)
-            .map(|i| {
-                let phase = i % 5; // 0=approach, 1=grasp, 2=lift, 3=move, 4=place
-                let timestamp = base_ts
-                    + Duration::milliseconds(Self::ms_offset_to_i64(
-                        i as f64 * delta_time * 1_000.0,
-                    ));
-
-                // Vary joint positions slightly between phases while staying safe.
-                let joint_states: Vec<JointState> = self
-                    .profile
-                    .joints
-                    .iter()
-                    .map(|j| {
-                        let mid = Self::joint_mid(j.min, j.max);
-                        let range = j.max - j.min;
-                        // Small offset per phase: ±10% of range at most.
-                        let offset = range * 0.1 * (phase as f64 - 2.0) / 2.0;
-                        JointState {
-                            name: j.name.clone(),
-                            position: (mid + offset).clamp(j.min, j.max),
-                            velocity: j.max_velocity * 0.3,
-                            effort: j.max_torque * 0.3,
-                        }
-                    })
-                    .collect();
-
-                // Grasp force only during grasp/lift/move phases.
-                let grasp = if (1..=3).contains(&phase) {
-                    Some(safe_grasp)
-                } else {
-                    None
-                };
-
-                let ee_forces = if (1..=3).contains(&phase) {
-                    vec![EndEffectorForce {
-                        name: ee_positions
-                            .first()
-                            .map(|e| e.name.clone())
-                            .unwrap_or_else(|| "end_effector".to_owned()),
-                        force: [0.0, 0.0, safe_force],
-                        torque: [0.0, 0.0, 0.0],
-                        grasp_force: grasp,
-                    }]
-                } else {
-                    vec![]
-                };
-
-                let payload = if (2..=3).contains(&phase) {
-                    Some(safe_payload)
-                } else {
-                    None
-                };
-
-                Command {
-                    timestamp,
-                    source: source.clone(),
-                    sequence: i as u64,
-                    joint_states,
-                    delta_time,
-                    end_effector_positions: ee_positions.clone(),
-                    center_of_mass: Self::valid_com(self.profile),
-                    authority: authority.clone(),
-                    metadata: Self::metadata_stamp(&meta_template, i),
-                    locomotion_state: None,
-                    end_effector_forces: ee_forces,
-                    estimated_payload_kg: payload,
-                    signed_sensor_readings: vec![],
-                    zone_overrides: HashMap::new(),
-                    environment_state: None,
-                }
-            })
-            .collect()
-    }
-
-    /// A-04: Walking gait cycle. Valid locomotion state with base velocity,
-    /// foot contacts, and step length all within P15-P20 limits.
-    fn walking_gait(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
-        let base_ts: DateTime<Utc> = Utc::now();
-        let delta_time = self.profile.max_delta_time * 0.5;
-        let joint_states = self.baseline_joint_states();
-        let ee_pos = Self::safe_end_effector(self.profile);
-        let meta_template = Self::metadata_template(self.scenario);
-        let authority = Self::authority(pca_chain_b64, ops);
-        let source = "walking_gait_agent".to_owned();
-
-        let max_vel = self
-            .profile
-            .locomotion
-            .as_ref()
-            .map(|l| l.max_locomotion_velocity)
-            .unwrap_or(1.5);
-        let max_step = self
-            .profile
-            .locomotion
-            .as_ref()
-            .map(|l| l.max_step_length)
-            .unwrap_or(0.5);
-        let min_clearance = self
-            .profile
-            .locomotion
-            .as_ref()
-            .map(|l| l.min_foot_clearance)
-            .unwrap_or(0.02);
-        let max_heading = self
-            .profile
-            .locomotion
-            .as_ref()
-            .map(|l| l.max_heading_rate)
-            .unwrap_or(1.0);
-
-        (0..count)
-            .map(|i| {
-                let timestamp = base_ts
-                    + Duration::milliseconds(Self::ms_offset_to_i64(
-                        i as f64 * delta_time * 1_000.0,
-                    ));
-
-                // Simulate alternating gait: left foot stance / right foot swing
-                // then swap every few steps.
-                let phase = (i / 5) % 2;
-                let left_contact = phase == 0;
-                let right_contact = !left_contact;
-                let swing_height = min_clearance * 2.0; // safely above minimum
-
-                let loco = LocomotionState {
-                    base_velocity: [max_vel * 0.6, 0.0, 0.0],
-                    heading_rate: max_heading * 0.2,
-                    feet: vec![
-                        FootState {
-                            name: "left_foot".into(),
-                            position: [-0.15, 0.1, if left_contact { 0.0 } else { swing_height }],
-                            contact: left_contact,
-                            ground_reaction_force: if left_contact {
-                                Some([0.0, 0.0, 400.0])
-                            } else {
-                                None
-                            },
-                        },
-                        FootState {
-                            name: "right_foot".into(),
-                            position: [0.15, -0.1, if right_contact { 0.0 } else { swing_height }],
-                            contact: right_contact,
-                            ground_reaction_force: if right_contact {
-                                Some([0.0, 0.0, 400.0])
-                            } else {
-                                None
-                            },
-                        },
-                    ],
-                    step_length: max_step * 0.6,
-                };
-
-                Command {
-                    timestamp,
-                    source: source.clone(),
-                    sequence: i as u64,
-                    joint_states: joint_states.clone(),
-                    delta_time,
-                    end_effector_positions: vec![EndEffectorPosition {
-                        name: "end_effector".to_owned(),
-                        position: ee_pos,
-                    }],
-                    center_of_mass: Self::valid_com(self.profile),
-                    authority: authority.clone(),
-                    metadata: Self::metadata_stamp(&meta_template, i),
-                    locomotion_state: Some(loco),
-                    end_effector_forces: vec![],
-                    estimated_payload_kg: None,
-                    signed_sensor_readings: vec![],
-                    zone_overrides: HashMap::new(),
-                    environment_state: None,
-                }
-            })
-            .collect()
-    }
-
-    /// A-05: Human-proximate collaborative work. EE inside proximity zones
-    /// with velocity correctly scaled per P10. All commands must pass.
-    fn human_proximate(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
-        let base_ts: DateTime<Utc> = Utc::now();
-        let delta_time = self.profile.max_delta_time * 0.5;
-        let meta_template = Self::metadata_template(self.scenario);
-        let authority = Self::authority(pca_chain_b64, ops);
-        let source = "human_proximate_agent".to_owned();
-
-        // Try to place EE inside the first proximity zone center.
-        let prox_center: [f64; 3] = {
-            use invariant_core::models::profile::ProximityZone;
-            self.profile
-                .proximity_zones
-                .first()
-                .map(|z| match z {
-                    ProximityZone::Sphere { center, .. } => *center,
-                    _ => Self::safe_end_effector(self.profile),
-                })
-                .unwrap_or_else(|| Self::safe_end_effector(self.profile))
-        };
-
-        // Ensure the EE position is inside workspace.
-        let ee_pos = if point_in_workspace(prox_center, self.profile) {
-            prox_center
-        } else {
-            Self::safe_end_effector(self.profile)
-        };
-
-        let prox_scale = Self::proximity_scale_at(self.profile, ee_pos);
-
-        // Build end effectors including collision-pair links at safe positions.
-        let mut ee_positions = Self::safe_end_effectors(self.profile);
-        // Override the generic EE with our proximity-zone position.
-        if let Some(first) = ee_positions.first_mut() {
-            first.position = ee_pos;
-        }
-
-        // Use joint velocities scaled by proximity factor (safely within limits).
-        let margins = self.profile.real_world_margins.as_ref();
-        let vel_margin = margins.map(|m| m.velocity_margin).unwrap_or(0.0);
-
-        (0..count)
-            .map(|i| {
-                let timestamp = base_ts
-                    + Duration::milliseconds(Self::ms_offset_to_i64(
-                        i as f64 * delta_time * 1_000.0,
-                    ));
-
-                let joint_states: Vec<JointState> = self
-                    .profile
-                    .joints
-                    .iter()
-                    .map(|j| {
-                        let eff_vel = j.max_velocity
-                            * self.profile.global_velocity_scale
-                            * (1.0 - vel_margin)
-                            * prox_scale;
-                        JointState {
-                            name: j.name.clone(),
-                            position: Self::joint_mid(j.min, j.max),
-                            velocity: eff_vel * 0.7, // 70% of proximity-scaled limit
-                            effort: j.max_torque * 0.5,
-                        }
-                    })
-                    .collect();
-
-                Command {
-                    timestamp,
-                    source: source.clone(),
-                    sequence: i as u64,
-                    joint_states,
-                    delta_time,
-                    end_effector_positions: ee_positions.clone(),
-                    center_of_mass: Self::valid_com(self.profile),
-                    authority: authority.clone(),
-                    metadata: Self::metadata_stamp(&meta_template, i),
-                    locomotion_state: None,
-                    end_effector_forces: vec![],
-                    estimated_payload_kg: None,
-                    signed_sensor_readings: vec![],
-                    zone_overrides: HashMap::new(),
-                    environment_state: None,
-                }
-            })
-            .collect()
-    }
-
-    /// A-06: CNC tending full cycle — safe version. Zone overrides are
-    /// correctly synchronized so the EE is only inside a conditional zone
-    /// when it is disabled. All commands must be approved.
-    fn nominal_cnc_tending(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
-        let base_ts: DateTime<Utc> = Utc::now();
-        let delta_time = self.profile.max_delta_time * 0.5;
-        let joint_states = self.baseline_joint_states();
-        let meta_template = Self::metadata_template(self.scenario);
-        let authority = Self::authority(pca_chain_b64, ops);
-        let source = "nominal_cnc_agent".to_owned();
-        let safe_pos = Self::safe_end_effector(self.profile);
-
-        // Find conditional zone name and a point inside it.
-        let conditional_zone_info: Option<(String, [f64; 3])> = self
-            .profile
-            .exclusion_zones
-            .iter()
-            .find(|z| match z {
-                ExclusionZone::Aabb { conditional, .. } => *conditional,
-                ExclusionZone::Sphere { conditional, .. } => *conditional,
-                _ => false,
-            })
-            .and_then(|z| {
-                let name = match z {
-                    ExclusionZone::Aabb { name, .. } => name.clone(),
-                    ExclusionZone::Sphere { name, .. } => name.clone(),
-                    _ => return None,
-                };
-                point_inside_exclusion_zone(z).map(|p| (name, p))
-            });
-
-        let mut extra_ee = Self::safe_end_effectors(self.profile);
-        extra_ee.retain(|ee| ee.name != "end_effector");
-
-        let half = count / 2;
-
-        (0..count)
-            .map(|i| {
-                let timestamp = base_ts
-                    + Duration::milliseconds(Self::ms_offset_to_i64(
-                        i as f64 * delta_time * 1_000.0,
-                    ));
-
-                let is_loading_phase = i < half;
-
-                // Loading phase: EE inside conditional zone with zone DISABLED → safe.
-                // Cutting phase: EE at safe position with zone ACTIVE → also safe.
-                let (ee_pos, zone_overrides) =
-                    if let Some((ref zone_name, zone_point)) = conditional_zone_info {
-                        let mut overrides = HashMap::new();
-                        if is_loading_phase {
-                            // Zone disabled, EE inside zone area → safe.
-                            overrides.insert(zone_name.clone(), false);
-                            (zone_point, overrides)
-                        } else {
-                            // Zone active, EE at safe position → safe.
-                            overrides.insert(zone_name.clone(), true);
-                            (safe_pos, overrides)
-                        }
-                    } else {
-                        (safe_pos, HashMap::new())
-                    };
-
-                let mut ee_positions = vec![EndEffectorPosition {
-                    name: "gripper".to_owned(),
-                    position: ee_pos,
-                }];
-                ee_positions.extend(extra_ee.clone());
-
-                Command {
-                    timestamp,
-                    source: source.clone(),
-                    sequence: i as u64,
-                    joint_states: joint_states.clone(),
-                    delta_time,
-                    end_effector_positions: ee_positions,
-                    center_of_mass: Self::valid_com(self.profile),
-                    authority: authority.clone(),
-                    metadata: Self::metadata_stamp(&meta_template, i),
-                    locomotion_state: None,
-                    end_effector_forces: vec![],
-                    estimated_payload_kg: None,
-                    signed_sensor_readings: vec![],
-                    zone_overrides,
-                    environment_state: None,
-                }
-            })
-            .collect()
-    }
-
-    /// A-07: Dexterous manipulation. Fine-grained joint movements within
-    /// limits with small position variations between steps.
-    fn dexterous_manipulation(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
-        let base_ts: DateTime<Utc> = Utc::now();
-        let delta_time = self.profile.max_delta_time * 0.5;
-        let meta_template = Self::metadata_template(self.scenario);
-        let authority = Self::authority(pca_chain_b64, ops);
-        let source = "dexterous_agent".to_owned();
-        let ee_positions = Self::safe_end_effectors(self.profile);
-
-        // Safe end-effector forces for manipulation.
-        let safe_grasp = self
-            .profile
-            .end_effectors
-            .first()
-            .map(|ee| {
-                let min = ee.min_grasp_force_n;
-                let max = ee.max_grasp_force_n;
-                (min + max) / 2.0
-            })
-            .unwrap_or(5.0);
-
-        (0..count)
-            .map(|i| {
-                let timestamp = base_ts
-                    + Duration::milliseconds(Self::ms_offset_to_i64(
-                        i as f64 * delta_time * 1_000.0,
-                    ));
-
-                // Small sinusoidal position variation (±5% of range) around midpoint.
-                let t = i as f64 * 0.1;
-                let joint_states: Vec<JointState> = self
-                    .profile
-                    .joints
-                    .iter()
-                    .enumerate()
-                    .map(|(j_idx, j)| {
-                        let mid = Self::joint_mid(j.min, j.max);
-                        let range = j.max - j.min;
-                        let phase = t + j_idx as f64 * 0.5;
-                        let offset = range * 0.05 * phase.sin();
-                        JointState {
-                            name: j.name.clone(),
-                            position: (mid + offset).clamp(j.min, j.max),
-                            velocity: j.max_velocity * 0.2, // slow, precise movements
-                            effort: j.max_torque * 0.2,
-                        }
-                    })
-                    .collect();
-
-                let ee_forces = vec![EndEffectorForce {
-                    name: ee_positions
-                        .first()
-                        .map(|e| e.name.clone())
-                        .unwrap_or_else(|| "end_effector".to_owned()),
-                    force: [0.0, 0.0, 2.0], // light contact force
-                    torque: [0.0, 0.0, 0.0],
-                    grasp_force: Some(safe_grasp),
-                }];
-
-                Command {
-                    timestamp,
-                    source: source.clone(),
-                    sequence: i as u64,
-                    joint_states,
-                    delta_time,
-                    end_effector_positions: ee_positions.clone(),
-                    center_of_mass: Self::valid_com(self.profile),
-                    authority: authority.clone(),
-                    metadata: Self::metadata_stamp(&meta_template, i),
-                    locomotion_state: None,
-                    end_effector_forces: ee_forces,
-                    estimated_payload_kg: None,
-                    signed_sensor_readings: vec![],
-                    zone_overrides: HashMap::new(),
-                    environment_state: None,
-                }
-            })
-            .collect()
-    }
-
-    /// A-08: Multi-robot coordinated task. Commands from alternating valid
-    /// sources with monotonically increasing sequence numbers.
-    fn multi_robot_coordinated(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
-        let base_ts: DateTime<Utc> = Utc::now();
-        let delta_time = self.profile.max_delta_time * 0.5;
-        let joint_states = self.baseline_joint_states();
-        let ee_positions = Self::safe_end_effectors(self.profile);
-        let meta_template = Self::metadata_template(self.scenario);
-        let authority = Self::authority(pca_chain_b64, ops);
-
-        let sources = ["robot_alpha", "robot_beta"];
-
-        (0..count)
-            .map(|i| {
-                let timestamp = base_ts
-                    + Duration::milliseconds(Self::ms_offset_to_i64(
-                        i as f64 * delta_time * 1_000.0,
-                    ));
-
-                // Alternate sources but keep sequence monotonic per source.
-                let source_idx = i % sources.len();
-                let source = sources[source_idx].to_owned();
-
-                Command {
-                    timestamp,
-                    source,
-                    sequence: i as u64,
-                    joint_states: joint_states.clone(),
-                    delta_time,
-                    end_effector_positions: ee_positions.clone(),
-                    center_of_mass: Self::valid_com(self.profile),
-                    authority: authority.clone(),
-                    metadata: Self::metadata_stamp(&meta_template, i),
-                    locomotion_state: None,
-                    end_effector_forces: vec![],
-                    estimated_payload_kg: None,
-                    signed_sensor_readings: vec![],
-                    zone_overrides: HashMap::new(),
-                    environment_state: None,
-                }
-            })
-            .collect()
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2578,6 +2540,10 @@ mod tests {
         for scenario in [
             ScenarioType::Baseline,
             ScenarioType::Aggressive,
+            ScenarioType::PickAndPlace,
+            ScenarioType::CollaborativeWork,
+            ScenarioType::DexterousManipulation,
+            ScenarioType::MultiRobotCoordinated,
             ScenarioType::ExclusionZone,
             ScenarioType::AuthorityEscalation,
             ScenarioType::ChainForgery,
@@ -2713,6 +2679,184 @@ mod tests {
                 );
             }
         }
+    }
+
+    // --- Category A: Normal operation scenario tests ---
+
+    #[test]
+    fn pick_and_place_positions_within_limits() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::PickAndPlace);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        for cmd in &cmds {
+            for (js, jdef) in cmd.joint_states.iter().zip(profile.joints.iter()) {
+                assert!(
+                    js.position >= jdef.min && js.position <= jdef.max,
+                    "PickAndPlace position {:.4} out of [{:.4}, {:.4}] for {}",
+                    js.position,
+                    jdef.min,
+                    jdef.max,
+                    jdef.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pick_and_place_has_payload() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::PickAndPlace);
+        let cmds = gen.generate_commands(5, FAKE_PCA, &ops());
+        assert!(
+            cmds.iter().all(|c| c.estimated_payload_kg.is_some()),
+            "PickAndPlace commands must carry estimated_payload_kg"
+        );
+    }
+
+    #[test]
+    fn walking_gait_has_locomotion_state() {
+        let profile = quadruped();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::WalkingGait);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        for cmd in &cmds {
+            assert!(
+                cmd.locomotion_state.is_some(),
+                "WalkingGait must have locomotion_state"
+            );
+        }
+    }
+
+    #[test]
+    fn walking_gait_velocity_within_limit() {
+        let profile = quadruped();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::WalkingGait);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        let max_vel = profile
+            .locomotion
+            .as_ref()
+            .map(|l| l.max_locomotion_velocity)
+            .unwrap_or(1.5);
+        for cmd in &cmds {
+            let loco = cmd.locomotion_state.as_ref().unwrap();
+            let [vx, vy, vz] = loco.base_velocity;
+            let speed = (vx * vx + vy * vy + vz * vz).sqrt();
+            assert!(
+                speed <= max_vel,
+                "WalkingGait speed {speed:.3} exceeds max {max_vel:.3}"
+            );
+        }
+    }
+
+    #[test]
+    fn walking_gait_step_length_within_limit() {
+        let profile = quadruped();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::WalkingGait);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        let max_step = profile
+            .locomotion
+            .as_ref()
+            .map(|l| l.max_step_length)
+            .unwrap_or(0.4);
+        for cmd in &cmds {
+            let loco = cmd.locomotion_state.as_ref().unwrap();
+            assert!(
+                loco.step_length <= max_step,
+                "WalkingGait step_length {:.3} exceeds max {max_step:.3}",
+                loco.step_length
+            );
+        }
+    }
+
+    #[test]
+    fn collaborative_work_velocities_within_limits() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::CollaborativeWork);
+        let cmds = gen.generate_commands(10, FAKE_PCA, &ops());
+        for cmd in &cmds {
+            for (js, jdef) in cmd.joint_states.iter().zip(profile.joints.iter()) {
+                let limit = jdef.max_velocity * profile.global_velocity_scale;
+                assert!(
+                    js.velocity.abs() <= limit,
+                    "CollaborativeWork velocity {:.4} exceeds limit {:.4} for {}",
+                    js.velocity,
+                    limit,
+                    jdef.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cnc_tending_full_cycle_generates_correct_count() {
+        let profile = cnc_profile();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::CncTendingFullCycle);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        assert_eq!(cmds.len(), 20);
+    }
+
+    #[test]
+    fn dexterous_manipulation_positions_within_limits() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::DexterousManipulation);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        for cmd in &cmds {
+            for (js, jdef) in cmd.joint_states.iter().zip(profile.joints.iter()) {
+                assert!(
+                    js.position >= jdef.min && js.position <= jdef.max,
+                    "DexterousManipulation position {:.4} out of [{:.4}, {:.4}] for {}",
+                    js.position,
+                    jdef.min,
+                    jdef.max,
+                    jdef.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dexterous_manipulation_velocities_within_limits() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::DexterousManipulation);
+        let cmds = gen.generate_commands(20, FAKE_PCA, &ops());
+        for cmd in &cmds {
+            for (js, jdef) in cmd.joint_states.iter().zip(profile.joints.iter()) {
+                let limit = jdef.max_velocity * profile.global_velocity_scale;
+                assert!(
+                    js.velocity.abs() <= limit,
+                    "DexterousManipulation velocity {:.4} exceeds limit {:.4} for {}",
+                    js.velocity,
+                    limit,
+                    jdef.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn multi_robot_coordinated_sequences_are_monotonic() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::MultiRobotCoordinated);
+        let cmds = gen.generate_commands(10, FAKE_PCA, &ops());
+        let seqs: Vec<u64> = cmds.iter().map(|c| c.sequence).collect();
+        for w in seqs.windows(2) {
+            assert!(
+                w[1] > w[0],
+                "MultiRobotCoordinated must have monotonic sequences"
+            );
+        }
+    }
+
+    #[test]
+    fn multi_robot_coordinated_has_two_sources() {
+        let profile = panda();
+        let gen = ScenarioGenerator::new(&profile, ScenarioType::MultiRobotCoordinated);
+        let cmds = gen.generate_commands(10, FAKE_PCA, &ops());
+        let sources: HashSet<&str> = cmds.iter().map(|c| c.source.as_str()).collect();
+        assert_eq!(
+            sources.len(),
+            2,
+            "MultiRobotCoordinated must use exactly 2 sources"
+        );
     }
 
     #[test]
