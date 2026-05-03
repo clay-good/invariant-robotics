@@ -29,10 +29,10 @@
 
 /// Campaign configuration loader and data types.
 pub mod campaign;
-/// Per-episode data outputs: signed verdict chain, seed, and trace bundle.
-pub mod episode;
 /// Result collector for per-command verdicts.
 pub mod collector;
+/// Per-episode data outputs: signed verdict chain, seed, and trace bundle.
+pub mod episode;
 /// Fault injection engine for generating adversarial commands.
 pub mod injector;
 /// Isaac Lab Unix-socket bridge and dry-run orchestrator.

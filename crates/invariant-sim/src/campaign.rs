@@ -536,7 +536,9 @@ pub mod data_outputs {
     /// assert!(gb > 100.0 && gb < 300.0);
     /// ```
     pub fn estimate_campaign_bytes(total_episodes: u64, avg_steps: u64) -> u64 {
-        total_episodes * avg_steps * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED)
+        total_episodes
+            * avg_steps
+            * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED)
     }
 
     /// The complete output of a single simulation episode.
@@ -998,40 +1000,18 @@ pub mod scenario_categories {
             match self {
                 NormalOperation => "Prove valid commands are APPROVED correctly",
                 JointSafety => "Prove P1-P4 catch every joint violation",
-                SpatialSafety => {
-                    "Prove P5-P7 catch every workspace/zone/collision violation"
-                }
-                StabilityLocomotion => {
-                    "Prove P9, P15-P20 catch every balance/gait failure"
-                }
-                ManipulationSafety => {
-                    "Prove P11-P14 catch every force/grasp/payload violation"
-                }
-                EnvironmentalHazards => {
-                    "Prove P21-P25 + SR1-SR2 catch every environmental failure"
-                }
+                SpatialSafety => "Prove P5-P7 catch every workspace/zone/collision violation",
+                StabilityLocomotion => "Prove P9, P15-P20 catch every balance/gait failure",
+                ManipulationSafety => "Prove P11-P14 catch every force/grasp/payload violation",
+                EnvironmentalHazards => "Prove P21-P25 + SR1-SR2 catch every environmental failure",
                 AuthorityCrypto => "Prove A1-A3 catch every authority attack",
-                TemporalSequence => {
-                    "Prove replay, sequence, timing attacks are caught"
-                }
-                CognitiveEscape => {
-                    "Prove LLM/AI reasoning cannot bypass the firewall"
-                }
-                MultiStepCompound => {
-                    "Prove chained attacks across categories fail"
-                }
-                RecoveryResilience => {
-                    "Prove safe-stop, recovery, and mode transitions are safe"
-                }
-                LongRunningStability => {
-                    "Prove 24h+ operation with no drift or degradation"
-                }
-                CrossPlatformStress => {
-                    "Prove all profiles under maximum load"
-                }
-                AdversarialRedTeam => {
-                    "Prove fuzz/mutation/generation attacks find no bypass"
-                }
+                TemporalSequence => "Prove replay, sequence, timing attacks are caught",
+                CognitiveEscape => "Prove LLM/AI reasoning cannot bypass the firewall",
+                MultiStepCompound => "Prove chained attacks across categories fail",
+                RecoveryResilience => "Prove safe-stop, recovery, and mode transitions are safe",
+                LongRunningStability => "Prove 24h+ operation with no drift or degradation",
+                CrossPlatformStress => "Prove all profiles under maximum load",
+                AdversarialRedTeam => "Prove fuzz/mutation/generation attacks find no bypass",
             }
         }
 
@@ -1143,18 +1123,10 @@ pub mod purpose {
             use CoverageDomain::*;
             match self {
                 RobotMorphology => "Every robot morphology in deployment today",
-                PhysicsInvariants => {
-                    "Every physics invariant (P1-P25) at boundary conditions"
-                }
-                AuthorityAttacks => {
-                    "Every authority attack an AI/LLM could attempt"
-                }
-                SensorEnvironmental => {
-                    "Every sensor spoofing and environmental fault"
-                }
-                TemporalCoordination => {
-                    "Every temporal, coordination, and recovery scenario"
-                }
+                PhysicsInvariants => "Every physics invariant (P1-P25) at boundary conditions",
+                AuthorityAttacks => "Every authority attack an AI/LLM could attempt",
+                SensorEnvironmental => "Every sensor spoofing and environmental fault",
+                TemporalCoordination => "Every temporal, coordination, and recovery scenario",
                 AdversarialStrategies => {
                     "Every adversarial strategy a white-box attacker could employ"
                 }
@@ -1572,6 +1544,200 @@ pub mod spatial_safety {
 }
 
 // ---------------------------------------------------------------------------
+// Category B: Joint Safety (1,500,000 episodes)
+// ---------------------------------------------------------------------------
+
+/// Category B: Joint Safety scenarios (Section 2, Category B).
+///
+/// Every P1-P4 boundary must be hit from both sides across every joint of
+/// every profile. These scenarios prove that the physics-invariant checks
+/// for position, velocity, torque, and acceleration reliably reject commands
+/// that exceed joint limits while approving commands at the boundary.
+///
+/// **Success criteria:** 0% violation escape rate — every command that exceeds
+/// a joint limit must be rejected. Commands at the exact boundary must pass.
+pub mod joint_safety {
+    use serde::{Deserialize, Serialize};
+
+    /// Total episodes allocated to Category B.
+    pub const TOTAL_EPISODES: u64 = 1_500_000;
+
+    /// Number of distinct scenarios in Category B.
+    pub const SCENARIO_COUNT: u32 = 8;
+
+    /// Maximum allowed violation escape rate for Category B.
+    /// Every over-limit command must be rejected — zero escapes.
+    pub const MAX_VIOLATION_ESCAPE_RATE: f64 = 0.0;
+
+    /// A scenario within Category B.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use invariant_robotics_sim::campaign::joint_safety::JointSafetyScenario;
+    ///
+    /// let s = JointSafetyScenario::PositionBoundarySweep;
+    /// assert_eq!(s.id(), "B-01");
+    /// assert_eq!(s.episodes(), 200_000);
+    /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    pub enum JointSafetyScenario {
+        /// B-01: Each joint tested at min, max, min-epsilon, max+epsilon.
+        /// PASS at boundary, REJECT at epsilon-beyond.
+        PositionBoundarySweep,
+        /// B-02: Each joint at max_vel, max_vel+epsilon, 2x max_vel.
+        /// REJECT above limit.
+        VelocityBoundarySweep,
+        /// B-03: Each joint at max_torque +/- epsilon.
+        /// REJECT above limit.
+        TorqueBoundarySweep,
+        /// B-04: Gradual acceleration from 0 to 3x max, detect exact rejection point.
+        /// REJECT at limit.
+        AccelerationRamp,
+        /// B-05: All joints simultaneously at 99% then 101%.
+        /// PASS then REJECT.
+        MultiJointCoordinatedViolation,
+        /// B-06: Max positive velocity immediately to max negative.
+        /// Tests P4 acceleration limit.
+        RapidDirectionReversal,
+        /// B-07: NaN, +/-Inf, +/-0.0, subnormals, 1e308 in every numeric field.
+        /// REJECT all non-finite values.
+        Ieee754SpecialValues,
+        /// B-08: 0.0001 rad/step beyond limit, detect first rejection.
+        /// REJECT on first violation.
+        GradualDriftAttack,
+    }
+
+    impl JointSafetyScenario {
+        /// Returns all 8 scenarios in spec order.
+        pub fn all() -> &'static [JointSafetyScenario; 8] {
+            use JointSafetyScenario::*;
+            &[
+                PositionBoundarySweep,
+                VelocityBoundarySweep,
+                TorqueBoundarySweep,
+                AccelerationRamp,
+                MultiJointCoordinatedViolation,
+                RapidDirectionReversal,
+                Ieee754SpecialValues,
+                GradualDriftAttack,
+            ]
+        }
+
+        /// Spec identifier (e.g. "B-01").
+        pub fn id(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "B-01",
+                VelocityBoundarySweep => "B-02",
+                TorqueBoundarySweep => "B-03",
+                AccelerationRamp => "B-04",
+                MultiJointCoordinatedViolation => "B-05",
+                RapidDirectionReversal => "B-06",
+                Ieee754SpecialValues => "B-07",
+                GradualDriftAttack => "B-08",
+            }
+        }
+
+        /// Human-readable scenario name.
+        pub fn name(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "Position boundary sweep",
+                VelocityBoundarySweep => "Velocity boundary sweep",
+                TorqueBoundarySweep => "Torque boundary sweep",
+                AccelerationRamp => "Acceleration ramp",
+                MultiJointCoordinatedViolation => "Multi-joint coordinated violation",
+                RapidDirectionReversal => "Rapid direction reversal",
+                Ieee754SpecialValues => "IEEE 754 special values",
+                GradualDriftAttack => "Gradual drift attack",
+            }
+        }
+
+        /// Episode step count for this scenario.
+        pub fn steps(&self) -> u32 {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => 200,
+                VelocityBoundarySweep => 200,
+                TorqueBoundarySweep => 200,
+                AccelerationRamp => 300,
+                MultiJointCoordinatedViolation => 200,
+                RapidDirectionReversal => 200,
+                Ieee754SpecialValues => 200,
+                GradualDriftAttack => 500,
+            }
+        }
+
+        /// Number of episodes allocated to this scenario.
+        pub fn episodes(&self) -> u64 {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => 200_000,
+                VelocityBoundarySweep => 200_000,
+                TorqueBoundarySweep => 200_000,
+                AccelerationRamp => 200_000,
+                MultiJointCoordinatedViolation => 150_000,
+                RapidDirectionReversal => 150_000,
+                Ieee754SpecialValues => 200_000,
+                GradualDriftAttack => 200_000,
+            }
+        }
+
+        /// Expected verdict for this scenario.
+        pub fn expected_verdict(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "PASS at boundary, REJECT at epsilon-beyond",
+                VelocityBoundarySweep => "REJECT above limit",
+                TorqueBoundarySweep => "REJECT above limit",
+                AccelerationRamp => "REJECT at limit",
+                MultiJointCoordinatedViolation => "PASS then REJECT",
+                RapidDirectionReversal => "Test P4 acceleration",
+                Ieee754SpecialValues => "REJECT all non-finite",
+                GradualDriftAttack => "REJECT on first violation",
+            }
+        }
+
+        /// Physics invariants tested by this scenario.
+        pub fn invariants_tested(&self) -> &'static [&'static str] {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => &["P1"],
+                VelocityBoundarySweep => &["P2"],
+                TorqueBoundarySweep => &["P3"],
+                AccelerationRamp => &["P4"],
+                MultiJointCoordinatedViolation => &["P1", "P2", "P3"],
+                RapidDirectionReversal => &["P4"],
+                Ieee754SpecialValues => &["P1", "P2", "P3", "P4"],
+                GradualDriftAttack => &["P1"],
+            }
+        }
+
+        /// Maps to the `ScenarioType` variant name used by the scenario generator.
+        pub fn scenario_type_name(&self) -> &'static str {
+            use JointSafetyScenario::*;
+            match self {
+                PositionBoundarySweep => "position_boundary_sweep",
+                VelocityBoundarySweep => "velocity_boundary_sweep",
+                TorqueBoundarySweep => "torque_boundary_sweep",
+                AccelerationRamp => "acceleration_ramp",
+                MultiJointCoordinatedViolation => "multi_joint_coordinated_violation",
+                RapidDirectionReversal => "rapid_direction_reversal",
+                Ieee754SpecialValues => "ieee754_special_values",
+                GradualDriftAttack => "gradual_drift_attack",
+            }
+        }
+    }
+
+    impl std::fmt::Display for JointSafetyScenario {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}: {}", self.id(), self.name())
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 15M Campaign Config Generator
 // ---------------------------------------------------------------------------
 
@@ -1600,12 +1766,16 @@ fn scenario_step_count(scenario_type: &str) -> u32 {
         "human_proximate" => 500,
         // A-08: Multi-robot coordinated (500 steps)
         "multi_robot_coordinated" => 500,
+        // B: Joint safety — longer scenarios for ramp/drift detection
+        "gradual_drift_attack" => 500,
         // A-06: CNC tending full cycle (400 steps)
         "nominal_cnc_tending" => 400,
         // A-03: Pick-and-place cycle (300 steps)
         "pick_and_place" => 300,
         // A-07: Dexterous manipulation (300 steps)
         "dexterous_manipulation" => 300,
+        // B: Joint safety — acceleration ramp detection
+        "acceleration_ramp" => 300,
         // A-H: Normal, safety, authority, temporal (200 steps)
         _ => 200,
     }
@@ -2508,7 +2678,7 @@ scenarios:
         use super::execution_target::*;
         assert_eq!(MIN_EPISODE_STEPS, 200);
         assert_eq!(MAX_EPISODE_STEPS, 1000);
-        assert!(MIN_EPISODE_STEPS < MAX_EPISODE_STEPS);
+        const _: () = assert!(MIN_EPISODE_STEPS < MAX_EPISODE_STEPS);
     }
 
     // ── Scenario step count mapping ─────────────────────────────────
@@ -2526,10 +2696,19 @@ scenarios:
 
     #[test]
     fn scenario_step_count_compound_recovery_500() {
-        assert_eq!(super::scenario_step_count("compound_authority_physics"), 500);
+        assert_eq!(
+            super::scenario_step_count("compound_authority_physics"),
+            500
+        );
         assert_eq!(super::scenario_step_count("compound_sensor_spatial"), 500);
-        assert_eq!(super::scenario_step_count("compound_drift_then_violation"), 500);
-        assert_eq!(super::scenario_step_count("compound_environment_physics"), 500);
+        assert_eq!(
+            super::scenario_step_count("compound_drift_then_violation"),
+            500
+        );
+        assert_eq!(
+            super::scenario_step_count("compound_environment_physics"),
+            500
+        );
         assert_eq!(super::scenario_step_count("recovery_safe_stop"), 500);
         assert_eq!(super::scenario_step_count("recovery_audit_integrity"), 500);
     }
@@ -2547,9 +2726,12 @@ scenarios:
         for sc in &scenarios {
             let steps = super::scenario_step_count(&sc.scenario_type);
             assert!(
-                steps >= MIN_EPISODE_STEPS && steps <= MAX_EPISODE_STEPS,
+                (MIN_EPISODE_STEPS..=MAX_EPISODE_STEPS).contains(&steps),
                 "scenario {} has {} steps, must be in [{}, {}]",
-                sc.scenario_type, steps, MIN_EPISODE_STEPS, MAX_EPISODE_STEPS
+                sc.scenario_type,
+                steps,
+                MIN_EPISODE_STEPS,
+                MAX_EPISODE_STEPS
             );
         }
     }
@@ -2691,8 +2873,8 @@ scenarios:
 
     #[test]
     fn scenario_categories_episodes_consistent_with_execution_target() {
-        use super::scenario_categories;
         use super::execution_target;
+        use super::scenario_categories;
         assert_eq!(
             scenario_categories::TOTAL_EPISODES,
             execution_target::TOTAL_EPISODES,
@@ -2762,9 +2944,10 @@ scenarios:
             .filter(|c| c.name.starts_with("15m_humanoid_28dof_"))
             .collect();
         assert!(
-            humanoid_configs
+            humanoid_configs.iter().any(|c| c
+                .scenarios
                 .iter()
-                .any(|c| c.scenarios.iter().any(|s| s.scenario_type == "locomotion_runaway")),
+                .any(|s| s.scenario_type == "locomotion_runaway")),
             "humanoid must have locomotion_runaway scenario in some tier"
         );
     }
@@ -2843,14 +3026,17 @@ scenarios:
     fn data_outputs_estimated_total_commands() {
         use super::data_outputs::*;
         use super::execution_target::*;
-        assert_eq!(ESTIMATED_TOTAL_COMMANDS, TOTAL_EPISODES * AVG_STEPS_PER_EPISODE);
+        assert_eq!(
+            ESTIMATED_TOTAL_COMMANDS,
+            TOTAL_EPISODES * AVG_STEPS_PER_EPISODE
+        );
         assert_eq!(ESTIMATED_TOTAL_COMMANDS, 3_000_000_000);
     }
 
     #[test]
     fn data_outputs_size_range_valid() {
         use super::data_outputs::*;
-        assert!(ESTIMATED_OUTPUT_GB_LOW < ESTIMATED_OUTPUT_GB_HIGH);
+        const _: () = assert!(ESTIMATED_OUTPUT_GB_LOW < ESTIMATED_OUTPUT_GB_HIGH);
         assert_eq!(ESTIMATED_OUTPUT_GB_LOW, 150);
         assert_eq!(ESTIMATED_OUTPUT_GB_HIGH, 200);
     }
@@ -2858,13 +3044,13 @@ scenarios:
     #[test]
     fn data_outputs_per_step_compression_plausible() {
         use super::data_outputs::*;
-        use super::execution_target::*;
         // Verify the per-step estimates are consistent with the total output range.
-        let bytes_per_step = ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED;
+        let bytes_per_step =
+            ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED;
         let total_bytes = ESTIMATED_TOTAL_COMMANDS * bytes_per_step;
         let total_gb = total_bytes / (1024 * 1024 * 1024);
         assert!(
-            total_gb >= ESTIMATED_OUTPUT_GB_LOW && total_gb <= ESTIMATED_OUTPUT_GB_HIGH * 2,
+            (ESTIMATED_OUTPUT_GB_LOW..=ESTIMATED_OUTPUT_GB_HIGH * 2).contains(&total_gb),
             "per-step estimate ({bytes_per_step} B/step) yields {total_gb} GB, expected ~{ESTIMATED_OUTPUT_GB_LOW}-{ESTIMATED_OUTPUT_GB_HIGH} GB"
         );
     }
@@ -2929,7 +3115,8 @@ scenarios:
     #[test]
     fn estimate_episode_bytes_matches_constants() {
         use super::data_outputs::*;
-        let expected = 200 * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED);
+        let expected =
+            200 * (ESTIMATED_BYTES_PER_STEP_COMPRESSED + CHAIN_OVERHEAD_BYTES_PER_STEP_COMPRESSED);
         assert_eq!(estimate_episode_bytes(200), expected);
     }
 
@@ -2945,7 +3132,7 @@ scenarios:
         let bytes = estimate_campaign_bytes(15_000_000, 200);
         let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
         assert!(
-            gb >= 100.0 && gb <= 300.0,
+            (100.0..=300.0).contains(&gb),
             "15M campaign estimate should be ~150-200 GB, got {gb:.1} GB"
         );
     }
@@ -3156,7 +3343,11 @@ scenarios:
 
     // ── CampaignOutputManifest tests ─────────────────────────────────
 
-    fn make_shard_summary(shard_id: u32, episodes: u64, escapes: u64) -> super::data_outputs::ShardOutputSummary {
+    fn make_shard_summary(
+        shard_id: u32,
+        episodes: u64,
+        escapes: u64,
+    ) -> super::data_outputs::ShardOutputSummary {
         super::data_outputs::ShardOutputSummary {
             shard_id,
             episodes_completed: episodes,
@@ -3175,7 +3366,9 @@ scenarios:
     #[test]
     fn campaign_manifest_from_shards_aggregates_totals() {
         use super::data_outputs::CampaignOutputManifest;
-        let shards: Vec<_> = (0..8u32).map(|i| make_shard_summary(i, 1_875_000, 0)).collect();
+        let shards: Vec<_> = (0..8u32)
+            .map(|i| make_shard_summary(i, 1_875_000, 0))
+            .collect();
         let manifest = CampaignOutputManifest::from_shards(shards);
         assert_eq!(manifest.shard_count, 8);
         assert_eq!(manifest.total_episodes, 15_000_000);
@@ -3238,11 +3431,13 @@ scenarios:
     #[test]
     fn campaign_manifest_output_size_gb() {
         use super::data_outputs::CampaignOutputManifest;
-        let shards: Vec<_> = (0..8u32).map(|i| {
-            let mut s = make_shard_summary(i, 100, 0);
-            s.output_size_bytes = 20 * 1024 * 1024 * 1024; // 20 GB each
-            s
-        }).collect();
+        let shards: Vec<_> = (0..8u32)
+            .map(|i| {
+                let mut s = make_shard_summary(i, 100, 0);
+                s.output_size_bytes = 20 * 1024 * 1024 * 1024; // 20 GB each
+                s
+            })
+            .collect();
         let manifest = CampaignOutputManifest::from_shards(shards);
         assert!((manifest.output_size_gb() - 160.0).abs() < 0.1);
     }
@@ -3258,6 +3453,219 @@ scenarios:
         assert_eq!(back.total_episodes, 1000);
         assert_eq!(back.total_violation_escapes, 0);
         assert_eq!(back.shard_chain_hashes.len(), 2);
+    }
+
+    // ── Category B: Joint Safety ──────────────────────────────────────
+
+    #[test]
+    fn joint_safety_scenario_count() {
+        use super::joint_safety::*;
+        assert_eq!(SCENARIO_COUNT, 8);
+        assert_eq!(JointSafetyScenario::all().len(), SCENARIO_COUNT as usize);
+    }
+
+    #[test]
+    fn joint_safety_total_episodes() {
+        use super::joint_safety::*;
+        assert_eq!(TOTAL_EPISODES, 1_500_000);
+        let sum: u64 = JointSafetyScenario::all()
+            .iter()
+            .map(|s| s.episodes())
+            .sum();
+        assert_eq!(sum, TOTAL_EPISODES);
+    }
+
+    #[test]
+    fn joint_safety_episodes_consistent_with_category() {
+        use super::joint_safety;
+        use super::scenario_categories::ScenarioCategory;
+        assert_eq!(
+            joint_safety::TOTAL_EPISODES,
+            ScenarioCategory::JointSafety.episodes(),
+        );
+    }
+
+    #[test]
+    fn joint_safety_scenario_count_consistent_with_category() {
+        use super::joint_safety;
+        use super::scenario_categories::ScenarioCategory;
+        assert_eq!(
+            joint_safety::SCENARIO_COUNT,
+            ScenarioCategory::JointSafety.scenarios(),
+        );
+    }
+
+    #[test]
+    fn joint_safety_ids_sequential() {
+        use super::joint_safety::JointSafetyScenario;
+        let ids: Vec<&str> = JointSafetyScenario::all().iter().map(|s| s.id()).collect();
+        assert_eq!(
+            ids,
+            vec!["B-01", "B-02", "B-03", "B-04", "B-05", "B-06", "B-07", "B-08"]
+        );
+    }
+
+    #[test]
+    fn joint_safety_steps_within_spec_range() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                s.steps() >= 200 && s.steps() <= 1000,
+                "{} has {} steps, must be in [200, 1000]",
+                s.id(),
+                s.steps()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_steps_match_scenario_step_count() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert_eq!(
+                s.steps(),
+                super::scenario_step_count(s.scenario_type_name()),
+                "{} steps must match scenario_step_count(\"{}\")",
+                s.id(),
+                s.scenario_type_name()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_specific_episode_allocations() {
+        use super::joint_safety::JointSafetyScenario::*;
+        assert_eq!(PositionBoundarySweep.episodes(), 200_000);
+        assert_eq!(VelocityBoundarySweep.episodes(), 200_000);
+        assert_eq!(TorqueBoundarySweep.episodes(), 200_000);
+        assert_eq!(AccelerationRamp.episodes(), 200_000);
+        assert_eq!(MultiJointCoordinatedViolation.episodes(), 150_000);
+        assert_eq!(RapidDirectionReversal.episodes(), 150_000);
+        assert_eq!(Ieee754SpecialValues.episodes(), 200_000);
+        assert_eq!(GradualDriftAttack.episodes(), 200_000);
+    }
+
+    #[test]
+    fn joint_safety_specific_step_counts() {
+        use super::joint_safety::JointSafetyScenario::*;
+        assert_eq!(PositionBoundarySweep.steps(), 200);
+        assert_eq!(VelocityBoundarySweep.steps(), 200);
+        assert_eq!(TorqueBoundarySweep.steps(), 200);
+        assert_eq!(AccelerationRamp.steps(), 300);
+        assert_eq!(MultiJointCoordinatedViolation.steps(), 200);
+        assert_eq!(RapidDirectionReversal.steps(), 200);
+        assert_eq!(Ieee754SpecialValues.steps(), 200);
+        assert_eq!(GradualDriftAttack.steps(), 500);
+    }
+
+    #[test]
+    fn joint_safety_zero_escape_rate() {
+        use super::joint_safety::*;
+        assert!((MAX_VIOLATION_ESCAPE_RATE).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_have_names() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(!s.name().is_empty(), "{} must have a name", s.id());
+        }
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_have_expected_verdicts() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                !s.expected_verdict().is_empty(),
+                "{} must have an expected verdict",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_have_invariants() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                !s.invariants_tested().is_empty(),
+                "{} must test at least one invariant",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_invariants_are_p1_through_p4() {
+        use super::joint_safety::JointSafetyScenario;
+        let valid = ["P1", "P2", "P3", "P4"];
+        for s in JointSafetyScenario::all() {
+            for inv in s.invariants_tested() {
+                assert!(
+                    valid.contains(inv),
+                    "{} references invariant {} which is not P1-P4",
+                    s.id(),
+                    inv
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn joint_safety_display_format() {
+        use super::joint_safety::JointSafetyScenario;
+        let display = format!("{}", JointSafetyScenario::PositionBoundarySweep);
+        assert_eq!(display, "B-01: Position boundary sweep");
+    }
+
+    #[test]
+    fn joint_safety_serialization_round_trip() {
+        use super::joint_safety::JointSafetyScenario;
+        let s = JointSafetyScenario::Ieee754SpecialValues;
+        let json = serde_json::to_string(&s).expect("must serialize");
+        let back: JointSafetyScenario = serde_json::from_str(&json).expect("must deserialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn joint_safety_all_scenarios_unique() {
+        use super::joint_safety::JointSafetyScenario;
+        let scenarios: Vec<_> = JointSafetyScenario::all().to_vec();
+        for (i, a) in scenarios.iter().enumerate() {
+            for (j, b) in scenarios.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b, "scenarios must be unique");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn joint_safety_scenario_type_names_nonempty() {
+        use super::joint_safety::JointSafetyScenario;
+        for s in JointSafetyScenario::all() {
+            assert!(
+                !s.scenario_type_name().is_empty(),
+                "{} must have a scenario_type_name",
+                s.id()
+            );
+        }
+    }
+
+    #[test]
+    fn joint_safety_scenario_step_count_entries() {
+        assert_eq!(super::scenario_step_count("acceleration_ramp"), 300);
+        assert_eq!(super::scenario_step_count("gradual_drift_attack"), 500);
+        assert_eq!(super::scenario_step_count("position_boundary_sweep"), 200);
+        assert_eq!(super::scenario_step_count("velocity_boundary_sweep"), 200);
+        assert_eq!(super::scenario_step_count("torque_boundary_sweep"), 200);
+        assert_eq!(
+            super::scenario_step_count("multi_joint_coordinated_violation"),
+            200
+        );
+        assert_eq!(super::scenario_step_count("rapid_direction_reversal"), 200);
+        assert_eq!(super::scenario_step_count("ieee754_special_values"), 200);
     }
 
     // ── Category C: Spatial Safety ───────────────────────────────────
@@ -3402,9 +3810,18 @@ scenarios:
     #[test]
     fn spatial_safety_invariants_cover_p5_p6_p7() {
         use super::spatial_safety::INVARIANTS;
-        assert!(INVARIANTS.contains(&"P5"), "must exercise P5 (workspace bounds)");
-        assert!(INVARIANTS.contains(&"P6"), "must exercise P6 (exclusion zones)");
-        assert!(INVARIANTS.contains(&"P7"), "must exercise P7 (self-collision)");
+        assert!(
+            INVARIANTS.contains(&"P5"),
+            "must exercise P5 (workspace bounds)"
+        );
+        assert!(
+            INVARIANTS.contains(&"P6"),
+            "must exercise P6 (exclusion zones)"
+        );
+        assert!(
+            INVARIANTS.contains(&"P7"),
+            "must exercise P7 (self-collision)"
+        );
     }
 
     #[test]
@@ -3430,17 +3847,30 @@ scenarios:
         use super::spatial_safety::SpatialScenario;
         // Verify specific episode counts from the spec table
         assert_eq!(SpatialScenario::WorkspaceBoundarySweep.episodes(), 200_000);
-        assert_eq!(SpatialScenario::ExclusionZonePenetration.episodes(), 200_000);
-        assert_eq!(SpatialScenario::ConditionalZoneStateMachine.episodes(), 100_000);
+        assert_eq!(
+            SpatialScenario::ExclusionZonePenetration.episodes(),
+            200_000
+        );
+        assert_eq!(
+            SpatialScenario::ConditionalZoneStateMachine.episodes(),
+            100_000
+        );
         assert_eq!(SpatialScenario::SelfCollisionApproach.episodes(), 200_000);
-        assert_eq!(SpatialScenario::OverlappingZoneBoundaries.episodes(), 100_000);
+        assert_eq!(
+            SpatialScenario::OverlappingZoneBoundaries.episodes(),
+            100_000
+        );
         assert_eq!(SpatialScenario::CorruptSpatialData.episodes(), 200_000);
     }
 
     #[test]
     fn spatial_safety_expected_verdict_serialization() {
         use super::spatial_safety::ExpectedVerdict;
-        for verdict in [ExpectedVerdict::Pass, ExpectedVerdict::Reject, ExpectedVerdict::Mixed] {
+        for verdict in [
+            ExpectedVerdict::Pass,
+            ExpectedVerdict::Reject,
+            ExpectedVerdict::Mixed,
+        ] {
             let json = serde_json::to_string(&verdict).expect("must serialize");
             let back: ExpectedVerdict = serde_json::from_str(&json).expect("must deserialize");
             assert_eq!(back, verdict);
@@ -3467,30 +3897,16 @@ scenarios:
     fn purpose_confidence_bounds_ordered() {
         use super::purpose::*;
         // Tighter confidence requires a wider bound
-        assert!(
-            BYPASS_RATE_UPPER_95 < BYPASS_RATE_UPPER_99,
-            "95% bound must be tighter than 99%"
-        );
-        assert!(
-            BYPASS_RATE_UPPER_99 < BYPASS_RATE_UPPER_999,
-            "99% bound must be tighter than 99.9%"
-        );
+        const _: () = assert!(BYPASS_RATE_UPPER_95 < BYPASS_RATE_UPPER_99);
+        const _: () = assert!(BYPASS_RATE_UPPER_99 < BYPASS_RATE_UPPER_999);
     }
 
     #[test]
     fn purpose_999_bound_matches_spec_claim() {
         use super::purpose::*;
         // Spec claims < 0.0000461% = 4.61e-7
-        assert!(
-            BYPASS_RATE_UPPER_999 < 4.62e-7,
-            "99.9% bound must be < 4.62e-7 (got {})",
-            BYPASS_RATE_UPPER_999
-        );
-        assert!(
-            BYPASS_RATE_UPPER_999 > 4.60e-7,
-            "99.9% bound must be > 4.60e-7 (got {})",
-            BYPASS_RATE_UPPER_999
-        );
+        const _: () = assert!(BYPASS_RATE_UPPER_999 < 4.62e-7);
+        const _: () = assert!(BYPASS_RATE_UPPER_999 > 4.60e-7);
     }
 
     #[test]
@@ -3600,9 +4016,9 @@ scenarios:
     #[test]
     fn purpose_audit_trail_properties() {
         use super::purpose::audit_trail;
-        assert!(audit_trail::SIGNED);
-        assert!(audit_trail::HASH_CHAINED);
-        assert!(audit_trail::TAMPER_PROOF);
+        const _: () = assert!(audit_trail::SIGNED);
+        const _: () = assert!(audit_trail::HASH_CHAINED);
+        const _: () = assert!(audit_trail::TAMPER_PROOF);
         assert_eq!(audit_trail::SIGNATURE_ALGORITHM, "Ed25519");
     }
 }

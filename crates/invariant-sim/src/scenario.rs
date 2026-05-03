@@ -208,9 +208,7 @@ impl<'a> ScenarioGenerator<'a> {
             ScenarioType::PickAndPlace => self.pick_and_place(count, pca_chain_b64, ops),
             ScenarioType::WalkingGait => self.walking_gait(count, pca_chain_b64, ops),
             ScenarioType::HumanProximate => self.human_proximate(count, pca_chain_b64, ops),
-            ScenarioType::NominalCncTending => {
-                self.nominal_cnc_tending(count, pca_chain_b64, ops)
-            }
+            ScenarioType::NominalCncTending => self.nominal_cnc_tending(count, pca_chain_b64, ops),
             ScenarioType::DexterousManipulation => {
                 self.dexterous_manipulation(count, pca_chain_b64, ops)
             }
@@ -1952,12 +1950,7 @@ impl<'a> ScenarioGenerator<'a> {
 
     /// A-03: Pick-and-place cycle. Alternates between approach, grasp, lift,
     /// move, and place phases — all within safe limits.
-    fn pick_and_place(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
+    fn pick_and_place(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
         let base_ts: DateTime<Utc> = Utc::now();
         let delta_time = self.profile.max_delta_time * 0.5;
         let meta_template = Self::metadata_template(self.scenario);
@@ -2066,12 +2059,7 @@ impl<'a> ScenarioGenerator<'a> {
 
     /// A-04: Walking gait cycle. Valid locomotion state with base velocity,
     /// foot contacts, and step length all within P15-P20 limits.
-    fn walking_gait(
-        &self,
-        count: usize,
-        pca_chain_b64: &str,
-        ops: &[Operation],
-    ) -> Vec<Command> {
+    fn walking_gait(&self, count: usize, pca_chain_b64: &str, ops: &[Operation]) -> Vec<Command> {
         let base_ts: DateTime<Utc> = Utc::now();
         let delta_time = self.profile.max_delta_time * 0.5;
         let joint_states = self.baseline_joint_states();
@@ -2125,11 +2113,7 @@ impl<'a> ScenarioGenerator<'a> {
                     feet: vec![
                         FootState {
                             name: "left_foot".into(),
-                            position: [
-                                -0.15,
-                                0.1,
-                                if left_contact { 0.0 } else { swing_height },
-                            ],
+                            position: [-0.15, 0.1, if left_contact { 0.0 } else { swing_height }],
                             contact: left_contact,
                             ground_reaction_force: if left_contact {
                                 Some([0.0, 0.0, 400.0])
@@ -2139,11 +2123,7 @@ impl<'a> ScenarioGenerator<'a> {
                         },
                         FootState {
                             name: "right_foot".into(),
-                            position: [
-                                0.15,
-                                -0.1,
-                                if right_contact { 0.0 } else { swing_height },
-                            ],
+                            position: [0.15, -0.1, if right_contact { 0.0 } else { swing_height }],
                             contact: right_contact,
                             ground_reaction_force: if right_contact {
                                 Some([0.0, 0.0, 400.0])

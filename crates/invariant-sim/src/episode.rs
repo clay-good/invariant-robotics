@@ -269,8 +269,7 @@ impl VerdictChainBuilder {
         // Step 2: compute SHA-256 of canonical JSON with entry_hash == "".
         // serde_json serialises struct fields in declaration order, so the
         // result is stable across calls.
-        let pre_json =
-            serde_json::to_vec(&entry).expect("AuditEntry serialization must not fail");
+        let pre_json = serde_json::to_vec(&entry).expect("AuditEntry serialization must not fail");
         let digest = Sha256::digest(&pre_json);
         let hash = format!("sha256:{}", hex_encode_bytes(digest.as_slice()));
         entry.entry_hash = hash.clone();
@@ -528,10 +527,7 @@ mod tests {
         }
         let chain = builder.build();
         for (i, entry) in chain.iter().enumerate() {
-            assert_eq!(
-                entry.signer_kid, kid,
-                "signer_kid mismatch at index {i}"
-            );
+            assert_eq!(entry.signer_kid, kid, "signer_kid mismatch at index {i}");
         }
     }
 
@@ -563,8 +559,7 @@ mod tests {
         chain[0].entry.entry_hash = "sha256:deadbeef".into();
         // The link check must now fail.
         assert_ne!(
-            chain[1].entry.previous_hash,
-            chain[0].entry.entry_hash,
+            chain[1].entry.previous_hash, chain[0].entry.entry_hash,
             "tampered chain should fail link check"
         );
     }
